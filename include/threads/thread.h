@@ -93,15 +93,17 @@ struct thread {
 	int priority;                       /* Priority. */
 	
 	int64_t timeToWakeUp;
-	int nice;
 	struct lock *lock_waiting;
-
-	struct list donation_list;
-	struct list_elem donation_elem;
 
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem;              /* List element. */
+
+	/* Advanced Scheduler */
+	int nice;
 	int recent_cpu;
+	
+	struct list lock_list;
+	int original_priority;
 
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
@@ -120,7 +122,7 @@ struct thread {
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
    Controlled by kernel command-line option "-o mlfqs". */
-extern bool thread_mlfqs;
+extern bool thread_mlfqs; // advanced-scheduler
 
 void thread_init (void);
 void thread_start (void);
@@ -154,10 +156,14 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
-void check_priority (void);
-bool cmp_priority (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
-bool cmp_donate_priority (const struct list_elem *l, const struct list_elem *s, void *aux UNUSED);
 
+bool cmp_priority (const struct list_elem *a, const struct list_elem *b);
+bool cmp_priority_lock (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
+void compare_and_yield (void);
+
+void mlfqs_load_avg (void);
+void mlfqs_priority_recalculate (void);
+void mlfqs_recent_cpu_recalculate(void);
 
 void do_iret (struct intr_frame *tf);
 
