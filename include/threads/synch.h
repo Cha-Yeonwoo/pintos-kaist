@@ -47,6 +47,12 @@ bool sema_cmp_priority (const struct list_elem *l, const struct list_elem *s, vo
 void donate_priority(struct thread *t, int new_priority, bool sort);
 void sort_all(struct thread *t);
 
+
+/* User Prog*/
+// int wait(int tid);	
+int fork(struct intr_frame *f);
+void exit(void);
+
 /* Optimization barrier.
  *
  * The compiler will not reorder operations across an

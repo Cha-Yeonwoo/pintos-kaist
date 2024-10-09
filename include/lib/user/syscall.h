@@ -78,4 +78,16 @@ get_fs_disk_write_cnt (void) {
 	return write_cnt;
 }
 
+
+int wait (int pid);
+
+// int halt(void);
+
+
+int exec(const char *cmd_line);
+// int exit(int status);
+int read(int fd, void *buffer, unsigned size);
+int write(int fd, const void *buffer, unsigned size);
+
+
 #endif /* lib/user/syscall.h */

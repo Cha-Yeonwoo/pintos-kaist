@@ -76,8 +76,15 @@ initd (void *f_name) {
 tid_t
 process_fork (const char *name, struct intr_frame *if_ UNUSED) {
 	/* Clone current thread to new thread.*/
-	return thread_create (name,
-			PRI_DEFAULT, __do_fork, thread_current ());
+	tid_t child = thread_create (name, PRI_DEFAULT, __do_fork, thread_current ());
+
+	if (child == TID_ERROR) // error handling
+		return TID_ERROR;
+
+	
+	return child;
+	// return thread_create (name,
+	// 		PRI_DEFAULT, __do_fork, thread_current ());
 }
 
 #ifndef VM
@@ -92,12 +99,16 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
 	bool writable;
 
 	/* 1. TODO: If the parent_page is kernel page, then return immediately. */
+	if (is_kernel_vaddr (va))
+		return true;
 
 	/* 2. Resolve VA from the parent's page map level 4. */
 	parent_page = pml4_get_page (parent->pml4, va);
 
 	/* 3. TODO: Allocate new PAL_USER page for the child and set result to
 	 *    TODO: NEWPAGE. */
+
+	newpage = palloc_get_page (PAL_USER); // new page for child
 
 	/* 4. TODO: Duplicate parent's page to the new page and
 	 *    TODO: check whether parent's page is writable or not (set WRITABLE
@@ -107,6 +118,7 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
 	 *    permission. */
 	if (!pml4_set_page (current->pml4, va, newpage, writable)) {
 		/* 6. TODO: if fail to insert page, do error handling. */
+		palloc_free_page (newpage);
 	}
 	return true;
 }
@@ -144,10 +156,13 @@ __do_fork (void *aux) {
 #endif
 
 	/* TODO: Your code goes here.
-	 * TODO: Hint) To duplicate the file object, use `file_duplicate`
+	 * TODO: Hint) To duplicate the file object, use `file_duplicate`*/
+	memcpy (&current->tf, &if_, sizeof (struct intr_frame));
+	/*
 	 * TODO:       in include/filesys/file.h. Note that parent should not return
 	 * TODO:       from the fork() until this function successfully duplicates
 	 * TODO:       the resources of parent.*/
+
 
 	process_init ();
 
@@ -176,13 +191,66 @@ process_exec (void *f_name) {
 	/* We first kill the current context */
 	process_cleanup ();
 
+	// ...
+	char *token, *save_ptr;
+	token = strtok_r(file_name, " ", &save_ptr);
+    if (token == NULL) {
+        palloc_free_page(file_name);
+        return -1;
+    }
+	
+
 	/* And then load the binary */
 	success = load (file_name, &_if);
+
+	// if success fails,immediately palloc free and return -1
+	if (!success){
+		palloc_free_page (file_name);
+		return -1;
+	}
+
+	// 여기서부터
+	char *argv[128]; // max가 뭐지
+    int argc = 0;
+    while ((token = strtok_r(NULL, " ", &save_ptr)) != NULL) {
+        _if.rsp -= strlen(token) + 1;
+        memcpy((void *)_if.rsp, token, strlen(token) + 1);
+        argv[argc++] = (char *)_if.rsp; // 인자 포인터 저장
+    }
+
+
+    // Null-terminate argv array
+    argv[argc] = NULL;
+
+    // 스택 정렬을 위해 padding을 추가하여 16바이트로 정렬
+    while ((uintptr_t)_if.rsp % 16 != 0) {
+        _if.rsp -= sizeof(uint8_t);
+        *(uint8_t *)_if.rsp = 0;
+    }
+
+    // Push argv pointers onto the stack (64-bit pointers)
+    for (int i = argc; i >= 0; i--) {
+        _if.rsp -= sizeof(char *);
+        memcpy((void *)_if.rsp, &argv[i], sizeof(char *));
+    }
+
+    // Push argc
+    _if.rsp -= sizeof(int);
+    memcpy((void *)_if.rsp, &argc, sizeof(int));
+
+    // Push return address (dummy value)
+    void *ret_addr = NULL;
+    _if.rsp -= sizeof(void *);
+    memcpy((void *)_if.rsp, &ret_addr, sizeof(void *));
+
+	// // 여기까지 추가됨
+
 
 	/* If load failed, quit. */
 	palloc_free_page (file_name);
 	if (!success)
-		return -1;
+		return -1; // exit..?
+
 
 	/* Start switched process. */
 	do_iret (&_if);
@@ -215,6 +283,7 @@ process_exit (void) {
 	 * TODO: Implement process termination message (see
 	 * TODO: project2/process_termination.html).
 	 * TODO: We recommend you to implement process resource cleanup here. */
+	printf("%s: exit(%d)\n", curr->name, curr->exit_status);
 
 	process_cleanup ();
 }

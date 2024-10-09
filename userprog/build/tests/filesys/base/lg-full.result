@@ -1,0 +1,14 @@
+FAIL
+Kernel panic in run: PANIC at ../../lib/kernel/list.c:255 in list_remove(): assertion `is_interior (elem)' failed.
+Call stack: 0x8004218b9f 0x800421944d 0x80042194be 0x800420c88e 0x800420c92d 0x800421ec78 0x800421eb94 0x800421df09 0x800421dd06 0x8004206151
+Translation of call stack:
+0x0000008004218b9f: debug_panic (lib/kernel/debug.c:32)
+0x000000800421944d: list_remove (lib/kernel/list.c:256)
+0x00000080042194be: list_pop_front (lib/kernel/list.c:270)
+0x000000800420c88e: malloc (threads/malloc.c:139)
+0x000000800420c92d: calloc (threads/malloc.c:159)
+0x000000800421ec78: file_open (filesys/file.c:18)
+0x000000800421eb94: free_map_create (filesys/free-map.c:72)
+0x000000800421df09: do_format (filesys/filesys.c:116)
+0x000000800421dd06: filesys_init (filesys/filesys.c:40)
+0x0000008004206151: main (threads/init.c:119)

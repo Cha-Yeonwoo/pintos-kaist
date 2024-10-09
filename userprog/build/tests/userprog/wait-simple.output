@@ -1,0 +1,22 @@
+Kernel command line: -q -f put wait-simple put child-simple run wait-simple
+0 ~ 9fc00 1
+100000 ~ 13e0000 1
+Pintos booting with: 
+	base_mem: 0x0 ~ 0x9fc00 (Usable: 639 kB)
+	ext_mem: 0x100000 ~ 0x13e0000 (Usable: 19,328 kB)
+Calibrating timer...  78,540,800 loops/s.
+hd0:0: detected 321 sector (160 kB) disk, model "QEMU HARDDISK", serial "QM00001"
+hd0:1: detected 20,160 sector (9 MB) disk, model "QEMU HARDDISK", serial "QM00002"
+hd1:0: detected 204 sector (102 kB) disk, model "QEMU HARDDISK", serial "QM00003"
+Formatting file system...Kernel PANIC at ../../lib/kernel/list.c:255 in list_remove(): assertion `is_interior (elem)' failed.
+Call stack: 0x8004218b9f 0x800421944d 0x80042194be 0x800420c88e 0x800420c92d 0x800421ec78 0x800421eb94 0x800421df09 0x800421dd06 0x8004206151.
+The `backtrace' program can make call stacks useful.
+Read "Backtraces" in the "Debugging Tools" chapter
+of the Pintos documentation for more information.
+Timer: 75 ticks
+Thread: 30 idle ticks, 45 kernel ticks, 0 user ticks
+hd0:0: 0 reads, 0 writes
+hd0:1: 1 reads, 6 writes
+hd1:0: 0 reads, 0 writes
+Console: 1078 characters output
+Key
