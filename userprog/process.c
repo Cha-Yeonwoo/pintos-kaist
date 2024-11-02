@@ -214,6 +214,7 @@ process_wait (tid_t child_tid UNUSED) {
 	/* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
 	 * XXX:       to add infinite loop here before
 	 * XXX:       implementing the process_wait. */
+	thread_sleep(5000);
 	return -1;
 }
 
@@ -332,6 +333,7 @@ static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
  * Returns true if successful, false otherwise. */
 static bool
 load (const char *file_name, struct intr_frame *if_) {
+	//msg ("LOAD called!\n");
 	struct thread *t = thread_current ();
 	struct ELF ehdr;
 	struct file *file = NULL;
@@ -347,7 +349,14 @@ load (const char *file_name, struct intr_frame *if_) {
 
 	// file_name? tokenize 한 후, 처음 것을 갖다 쓰면 됨
 	char *parse_name;
-	char *token = strtok_r((char *) file_name, " ", &parse_name);
+	char filename_new1[130];
+	strlcpy(filename_new1, file_name, 129);
+	char filename_new2[130];
+	strlcpy(filename_new2, file_name, 129);
+	char filename_new3[130];
+	strlcpy(filename_new3, file_name, 129);
+	
+	char *token = strtok_r(filename_new1, " ", &parse_name);
 	if (token == NULL) {
 		printf ("load: %s: open failed\n", file_name);
 		goto done;
@@ -439,12 +448,14 @@ load (const char *file_name, struct intr_frame *if_) {
 	// token이 몇 개 있지...? 길이는 얼마..?
 	int argc = 0;
 	int arglen = 0;
-	for (token = strtok_r((char *) file_name, " ", &parse_name);
+	
+	for (token = strtok_r(filename_new2, " ", &parse_name);
 	token != NULL; 
 	token = strtok_r (NULL, " ", &parse_name)) { 
 		argc += 1;
 		arglen += (strlen(token) + 1);
 	} 
+
 	// rsp를 얼마나 내려야 하는가?
 	// arglen + (argc + 2) * sizeof(char *) + alpha(8의 배수를 만들기 위한 align)
 	while ((arglen % 8) != 0) { arglen += 1; }
@@ -455,16 +466,21 @@ load (const char *file_name, struct intr_frame *if_) {
 	*((void **) if_->rsp) = NULL; // return address
 
 	uintptr_t rsp_down = (if_->rsp) + 8;
-	for (token = strtok_r(file_name, " ", &parse_name);
+	
+	for (token = strtok_r(filename_new3, " ", &parse_name);
 	token != NULL; 
 	token = strtok_r (NULL, " ", &parse_name)) {
+		//printf("token. ");
 		rsp_up -= (strlen(token) + 1); 
 		size_t s = strlcpy ((char *) rsp_up, token, strlen(token) + 1);
+		//printf("argument is : %s\n", (char *) rsp_up);
 		ASSERT (s == strlen(token));
 		*((char **) rsp_down) = (char *) rsp_up;
 		rsp_down += 8;
 	} 
-	*((char **) rsp_down) = NULL;
+	//printf("Token complete. ");
+	memset(rsp_down, 0, sizeof(void *));
+	rsp_down += 8;
 	ASSERT (rsp_up >= rsp_down);
 	ASSERT (rsp_up - rsp_down < 8);
 	while (rsp_up > rsp_down) {
