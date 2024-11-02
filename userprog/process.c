@@ -24,6 +24,16 @@
 #include "vm/vm.h"
 #endif
 
+/* Utils for managing the Stack */
+#define push8(x) \
+	if_->rsp -= sizeof(uint8_t); \
+	*(uint8_t *)if_->rsp = (uint8_t) x;
+
+#define push64(x) \
+	if_->rsp -= sizeof(uint64_t); \
+	*(uint64_t *)if_->rsp = (uint64_t) x;
+
+
 static void process_cleanup (void);
 static bool load (char *file_name, struct intr_frame *if_);
 static void initd (void *f_name);
@@ -31,18 +41,19 @@ static void __do_fork (void *);
 
 /* General process initializer for initd and other process. */
 static void
-process_init (struct thread *parent, struct semaphore *sema, bool succ) {
- 	struct thread *current = thread_current ();
+process_init (struct thread *parent, struct semaphore *sema) {
+ 	struct thread *cur = thread_current ();
 
-	current->wait_on_exit = succ;
-	if (succ) {
-		sema_init (&current->wait_sema, 0);
-		sema_init (&current->cleanup_ok, 0);
-		current->exit_status = -1;
-		lock_acquire (&parent->child_lock);
-		list_push_back (&parent->childs, &current->child_elem);
-		lock_release (&parent->child_lock);
-	}
+	cur->wait_on_exit = true;
+
+	sema_init (&cur->wait_sema, 0);
+	sema_init (&cur->cleanup_ok, 0);
+	
+	cur->exit_status = -1;
+	lock_acquire (&parent->child_lock);
+	list_push_back (&parent->child_list, &cur->child_elem);
+	lock_release (&parent->child_lock);
+	
 
 	sema_up (sema);
 }
@@ -119,8 +130,7 @@ initd (void *aux_) {
 	supplemental_page_table_init (&thread_current ()->spt);
 #endif
 
-	// process_init ();
-	process_init (aux->parent, &aux->dial, true);
+	process_init (aux->parent, &aux->dial);
 
 	if (process_exec (f_name) < 0)
 		PANIC("Fail to launch initd\n");
@@ -187,7 +197,7 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
 	 *    permission. */
 	if (!pml4_set_page (current->pml4, va, newpage, writable)) {
 		/* 6. TODO: if fail to insert page, do error handling. */
-		palloc_free_page (newpage);
+		palloc_free_page (newpage); // free the allocated page
 		return false;
 	}
 	return true;
@@ -324,14 +334,14 @@ __do_fork (void *aux_) {
 	 * TODO:       from the fork() until this function successfully duplicates
 	 * TODO:       the resources of parent.*/
 
-	// process_init ();
-	succ = true;
+	succ = true; // successfully duplicated the resources.
 out:
 	free (map);
 out_no_free:
 	aux->succ = succ;
 	/* Give control back to the parent */
-	process_init (parent, &aux->dial, succ);
+	thread_current()->wait_on_exit = succ;
+	sema_up (&aux->dial);
 
 	/* Finally, switch to the newly created process. */
 	if (succ)
@@ -340,43 +350,6 @@ out_no_free:
  	thread_exit ();
 }
 
-
-void argument_stack(char **parse, int count, void **rsp) // 주소를 전달받았으므로 이중 포인터 사용
-{
-    // 프로그램 이름, 인자 문자열 push
-    for (int i = count - 1; i > -1; i--)
-    {
-        for (int j = strlen(parse[i]); j > -1; j--)
-        {
-            (*rsp)--;                      // 스택 주소 감소
-            **(char **)rsp = parse[i][j]; // 주소에 문자 저장
-        }
-        parse[i] = *(char **)rsp; // parse[i]에 현재 rsp의 값 저장해둠(지금 저장한 인자가 시작하는 주소값)
-    }
-
-    // 정렬 패딩 push
-    int padding = (int)*rsp % 8;
-    for (int i = 0; i < padding; i++)
-    {
-        (*rsp)--;
-        **(uint8_t **)rsp = 0; // rsp 직전까지 값 채움
-    }
-
-    // 인자 문자열 종료를 나타내는 0 push
-    (*rsp) -= 8;
-    **(char ***)rsp = 0; // char* 타입의 0 추가
-
-    // 각 인자 문자열의 주소 push
-    for (int i = count - 1; i > -1; i--)
-    {
-        (*rsp) -= 8; // 다음 주소로 이동
-        **(char ***)rsp = parse[i]; // char* 타입의 주소 추가
-    }
-
-    // return address push
-    (*rsp) -= 8;
-    **(void ***)rsp = 0; // void* 타입의 0 추가
-}
 
 /* Switch the current execution context to the f_name.
  * Returns -1 on fail. */
@@ -418,9 +391,7 @@ get_child_by_id (struct thread *parent, tid_t tid) {
 	struct list_elem *e;
 	struct thread *th;
 	lock_acquire (&parent->child_lock);
-	for (e = list_begin (&parent->childs);
-			e != list_end (&parent->childs);
-			e = list_next (e)) {
+	for (e = list_begin (&parent->child_list); e != list_end (&parent->child_list);  e = list_next (e)) {
 		th = list_entry (e, struct thread, child_elem);
 		if (th->tid == tid)
 			goto out;
@@ -484,8 +455,8 @@ process_exit (void) {
 		clean_filde (list_entry (e, struct filde, elem));
 	}
 
-	while (!list_empty (&thread_current ()->childs)) {
-		e = list_pop_front (&thread_current ()->childs);
+	while (!list_empty (&thread_current ()->child_list)) {
+		e = list_pop_front (&thread_current ()->child_list);
 		struct thread *th = list_entry (e, struct thread, child_elem);
 		th->wait_on_exit = false;
 		sema_up (&th->cleanup_ok);
@@ -601,63 +572,6 @@ static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
 		uint32_t read_bytes, uint32_t zero_bytes,
 		bool writable);
 
-#define push8(x) \
-	if_->rsp -= sizeof(uint8_t); \
-	*(uint8_t *)if_->rsp = (uint8_t) x;
-
-#define push64(x) \
-	if_->rsp -= sizeof(uint64_t); \
-	*(uint64_t *)if_->rsp = (uint64_t) x;
-
-/* load() helpers. */
-/* setup argument: play with pointer! */
-static bool setup_argument (struct intr_frame *if_, char *file_name) {
- 	/* Setup char by char */
-	char *endptr = file_name;
-	char *argarr;
-	char *ptr = endptr + strlen(endptr);
-
-	/* setup argv[][] */
-	for (; ptr != endptr; ptr--) {	// iterate from end, char by char
-		if (*ptr == ' ') {
-			if (*(ptr + 1) != 0)
-				*ptr = 0;
-			else
-				continue;
-		}
-
-		push8 (*ptr);
-	}
-	push8 (*ptr);
-	argarr = (char *) if_->rsp;
-
-	/* align */
-	while (if_->rsp & 7)
-		if_->rsp--;
-
-	/* last argv ptr */
-	ptr = (char *) USER_STACK - 1;	// argv[argc-1]
-	int argc = 0;
-	push64 (0);
-
-	/* setup argv[] */
-	while (ptr != argarr) {
-		if (*(ptr - 1) == 0) {
-			push64 (ptr);
-			argc++;
-		}
-		ptr--;
-	}
-	push64 (ptr);
-	argc++;
-	if_->R.rdi = argc;
-	if_->R.rsi = if_->rsp;
-	push64 (0);
-
-	return true;
-}
-
-
 /* Loads an ELF executable from FILE_NAME into the current thread.
  * Stores the executable's entry point into *RIP
  * and its initial stack pointer into *RSP.
@@ -760,9 +674,53 @@ load (char *file_name, struct intr_frame *if_) {
 	/* Set up stack. */
 	if (!setup_stack (if_))
 		goto done;
-	/* setup argument */
-	*(file_name + strlen(file_name)) = ' ';
-	setup_argument (if_, file_name);
+
+
+	/* Argument Parsing */
+
+	*(file_name + strlen(file_name)) = ' '; // add space at the end
+	
+	char *endptr = file_name;
+	char *arg_array;
+	char *ptr = endptr + strlen(endptr);
+
+	/* setup argv[][] */
+	for (; ptr != endptr; ptr--) {	// iterate from end, char by char
+		if (*ptr == ' ') {
+			if (*(ptr + 1) != 0)
+				*ptr = 0;
+			else
+				continue;
+		}
+
+		push8 (*ptr);
+	}
+	push8 (*ptr);
+	arg_array = (char *) if_->rsp; 
+
+	/* align */
+	while (if_->rsp & 7)
+		if_->rsp--;
+
+	/* last argv ptr */
+	ptr = (char *) USER_STACK - 1;	// argv[argc-1]
+	int argc = 0;
+	push64 (0);
+
+	/* setup argv[] */
+	while (ptr != arg_array) {
+		if (*(ptr - 1) == 0) {
+			push64 (ptr);
+			argc++;
+		}
+		ptr--;
+	}
+	push64 (ptr);
+	argc++;
+	if_->R.rdi = argc;
+	if_->R.rsi = if_->rsp;
+	push64 (0);
+
 
 	/* Start address. */
 	if_->rip = ehdr.e_entry;

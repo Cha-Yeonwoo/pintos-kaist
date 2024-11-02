@@ -6,7 +6,7 @@
 #include <stdint.h>
 #include "threads/synch.h"
 #include "threads/interrupt.h"
-#include "threads/fixed_point.h"
+
 #ifdef VM
 #include "vm/vm.h"
 #endif
@@ -116,7 +116,7 @@ struct thread {
 
 	struct lock *wait_lock;
 	int nice;
-	FP recent_cpu;
+	int recent_cpu;
 	/* Solution done. */
 
 #ifdef USERPROG
@@ -127,7 +127,7 @@ struct thread {
 	struct semaphore wait_sema;
 	struct semaphore cleanup_ok;
 	struct list_elem child_elem;
-	struct list childs;
+	struct list child_list;
 	struct lock child_lock;
 
 	struct list fd_list;
@@ -148,12 +148,8 @@ struct thread {
    Controlled by kernel command-line option "-o mlfqs". */
 extern bool thread_mlfqs;
 
-/* Solution */
-struct list sleep_list;
-bool cmp_priority (const struct list_elem *A,
-		const struct list_elem *B, void *aux UNUSED);
 
-/* Solution done. */
+struct list sleep_list;
 
 
 void thread_init (void);
@@ -178,10 +174,17 @@ void thread_yield (void);
 int thread_get_priority (void);
 void thread_set_priority (int);
 
+bool cmp_priority (const struct list_elem *a, const struct list_elem *b);
+void compare_and_yield (void);
+
 int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
+
+void mlfqs_load_avg (void);
+void mlfqs_priority_recalculate (void);
+void mlfqs_recent_cpu_recalculate(void);
 
 void do_iret (struct intr_frame *tf);
 

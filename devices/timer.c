@@ -133,17 +133,30 @@ static void
 timer_interrupt (struct intr_frame *args UNUSED) {
 	ticks++;
 	thread_tick (ticks);
-	/* Solution */
-	struct thread *th;
 
-	// while (!list_empty (&sleep_list)) {
-	// 	th = list_entry (list_front (&sleep_list), struct thread, elem);
-	// 	if (ticks >= th->timeToWakeUp) {
-	// 		list_pop_front (&sleep_list);
-	// 		thread_unblock (th);
-	// 	} else
-	// 		break;
-	// }
+
+
+	if (thread_mlfqs){
+		// TODO calculate recent_cpu and load_avg
+		// recent cpu 계산
+		// idel_thread, 각종 list 때문에 일단 thread.c에서 처리
+		struct thread *cur = thread_current();
+		// mlfqs_increment();
+		cur->recent_cpu = add_fp_int(cur->recent_cpu, 1);
+		// 4 tick 마다
+
+		if (ticks % TIMER_FREQ == 0) {
+		
+			mlfqs_load_avg();
+			// TODO recalculate all recent_cpu		 
+			mlfqs_recent_cpu_recalculate();
+		}
+
+		if (ticks % 4 == 0){
+			// TODO recalculate all  priority
+			mlfqs_priority_recalculate();
+		}
+	}
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer

@@ -21,8 +21,8 @@
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
 
-/* Big lock for filesystem. */
-struct lock filesys_lock;
+
+struct lock filesys_lock; 
 
 
 /* System call.
@@ -52,20 +52,14 @@ syscall_init (void) {
 	lock_init (&filesys_lock);
 }
 
-static void
-error_die (void) {
-	thread_current ()->exit_status = -1;
-	thread_exit ();
-}
+static bool validate_ptr (const void *p, size_t size, bool writable) {
 
-static bool
-validate_ptr (const void *p, size_t size, bool writable) {
 	if (p == NULL || !is_user_vaddr (p))
 		return false;
-	struct thread *current = thread_current ();
+	struct thread *cur = thread_current ();
 	void *ptr = pg_round_down (p);
 	for (; ptr <= pg_round_down (p + size); ptr += PGSIZE) {
-		uint64_t *pte = pml4e_walk (current->pml4, (uint64_t) ptr, 0);
+		uint64_t *pte = pml4e_walk (cur->pml4, (uint64_t) ptr, 0);
 		if (pte == NULL ||
 				is_kern_pte(pte) ||
 				(writable && !is_writable (pte)))
@@ -93,11 +87,11 @@ validate_string (const void *p) {
 
 /* flide manager */
 static bool
-fd_sort (const struct list_elem *A, const struct list_elem *B, void *_a UNUSED) {
-	const struct filde *fdA = list_entry (A, struct filde, elem);
-	const struct filde *fdB = list_entry (B, struct filde, elem);
+fd_sort (const struct list_elem *a, const struct list_elem *b) {
+	const struct filde *fda = list_entry (a, struct filde, elem);
+	const struct filde *fdb = list_entry (a, struct filde, elem);
 
-	return fdA->fd < fdB->fd;
+	return fda->fd < fdb->fd;
 }
 
 static struct filde *
@@ -152,11 +146,13 @@ clean_filde (struct filde *filde) {
 }
 
 static uint64_t
-SyS_fork (struct intr_frame *f) {
-	const char *name = (const char *) f->R.rdi;
+fork (struct intr_frame *f) {
+	char *name = (char *) f->R.rdi;
 
-	if (!validate_string (name))
-		error_die ();
+	if (!validate_string (name)){
+		thread_current ()->exit_status = -1;
+		thread_exit ();
+	}
 
 	lock_acquire(&filesys_lock);
 	tid_t tid = process_fork (name, f);
@@ -167,11 +163,16 @@ SyS_fork (struct intr_frame *f) {
 
 static int exec (struct intr_frame *f) {
 	char *fn_copy;
-	char *unused;
+	char *saved_ptr;
+	
+	const char *delimeter = " ";
+
 	const char *fname = (const char *) f->R.rdi;
 
-	if (!validate_string (fname))
-		error_die ();
+	if (!validate_string (fname)){
+		thread_current ()->exit_status = -1;
+		thread_exit ();
+	}
 
 	fn_copy = palloc_get_page (0);
 	if (fn_copy == NULL)
@@ -181,10 +182,11 @@ static int exec (struct intr_frame *f) {
 	if (strlen(fname) < PGSIZE) {
 		fn_copy[strlen(fname) + 1] = 0;
 	}
-	fn_copy = strtok_r(fn_copy, " ", &unused);
+	fn_copy = strtok_r(fn_copy, delimeter, &saved_ptr);
 
 	process_exec (fn_copy);
-	NOT_REACHED();
+
+	NOT_REACHED(); // process_exec should not return anything!
 	return -1;
 }
 
@@ -192,8 +194,10 @@ static int create(struct intr_frame *f) {
 	const char *file = (const char *) f->R.rdi;
 	unsigned initial_size = (unsigned) f->R.rsi;
 
-	if (!validate_string (file))
-		error_die ();
+	if (!validate_string (file)){
+		thread_current ()->exit_status = -1;
+		thread_exit ();
+	}
 
 	lock_acquire (&filesys_lock);
 	bool success = filesys_create (file, initial_size);
@@ -208,8 +212,10 @@ static int halt (void) {
 }
 
 int remove(const char *file) {
-	if (!validate_string (file))
-		error_die ();
+	if (!validate_string (file)){
+		thread_current ()->exit_status = -1;
+		thread_exit ();
+	}
 
 	lock_acquire (&filesys_lock);
 	bool success = filesys_remove (file);
@@ -227,11 +233,16 @@ open (struct intr_frame *f) {
 	int fd;
 	int ret = -1;
 
-	if (!validate_string (fname))
-		error_die ();
+	if (!validate_string (fname)){
+		thread_current ()->exit_status = -1;
+		thread_exit ();
+	}
 
-	lock_acquire(&filesys_lock);
+	lock_acquire(&filesys_lock); // lock the file system
+
 	fd = allocate_fd ();
+
+	// msg("DEBUG: open. fd: %d", fd);
 	if (fd >= 0) {
 		file = filesys_open(fname);
 		if (file) {
@@ -262,7 +273,7 @@ open (struct intr_frame *f) {
 }
 
 static uint64_t
-filesize (struct intr_frame *f) {
+file_size (struct intr_frame *f) {
 	int32_t fd = f->R.rdi;
 	struct filde *filde;
 	int ret = -1;
@@ -280,29 +291,39 @@ read (struct intr_frame *f) {
 	int fd = f->R.rdi;
 	char *buf = (char *) f->R.rsi;
 	size_t size = f->R.rdx;
-	size_t read_bytes = 0;
-	struct filde *filde;
 	int ret = -1;
+	struct filde *filde;
 
-	if (!validate_ptr (buf, size, true))
-		error_die ();
+
+	if (!validate_ptr (buf, size, true)){
+		thread_current()->exit_status = -1;
+		thread_exit();
+	}
 
 	lock_acquire (&filesys_lock);
 	filde = get_filde_by_fd (fd);
+
+	// msg("DEBUG: read. fd: %d", fd);
+
+
 	if (filde) {
 		switch (filde->type) {
 			case STDIN:
-				for (; read_bytes < size; read_bytes++)
+				ret = -1;
+				for (size_t read_bytes = 0; read_bytes < size; read_bytes++)
 					buf[read_bytes] = input_getc ();
 				break;
 			case STDOUT:
 				ret = -1;
 				break;
-			default:
+
+			default: // just reading
 				ret = file_read (filde->obj->file, buf, size);
 				break;
 		}
 	}
+
+	// unlock the file system
 	lock_release (&filesys_lock);
 	return ret;
 }
@@ -315,8 +336,10 @@ write (struct intr_frame *f) {
 	struct filde *filde;
 	int ret = -1;
 
-	if (!validate_ptr (buf, size, false))
-		error_die ();
+	if (!validate_ptr (buf, size, false)){
+		thread_current ()->exit_status = -1;
+		thread_exit ();
+	}
 
 	lock_acquire (&filesys_lock);
 	filde = get_filde_by_fd (fd);
@@ -405,7 +428,7 @@ syscall_handler (struct intr_frame *f) {
 			NOT_REACHED ();
 			break;
 		case SYS_FORK:
-			f->R.rax = SyS_fork (f);
+			f->R.rax = fork (f);
 			break;
 		case SYS_EXEC:
 			f->R.rax = exec (f);
@@ -423,7 +446,7 @@ syscall_handler (struct intr_frame *f) {
 			f->R.rax = open (f);
 			break;
 		case SYS_FILESIZE:
-			f->R.rax = filesize (f);
+			f->R.rax = file_size (f);
 			break;
 		case SYS_READ:
 			f->R.rax = read (f);
