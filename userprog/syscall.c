@@ -68,22 +68,7 @@ static bool validate_ptr (const void *p, size_t size, bool writable) {
 	return true;
 }
 
-static bool
-validate_string (const void *p) {
-	if (p == NULL || !is_user_vaddr (p))
-		return false;
-	struct thread *current = thread_current ();
-	void *ptr = pg_round_down (p);
-	for (; ; ptr += PGSIZE) {
-		uint64_t *pte = pml4e_walk (current->pml4, (uint64_t) ptr, 0);
-		if (pte == NULL || is_kern_pte(pte))
-			return false;
 
-		for (; *(char *)p != 0; p++);
-		if (*(char *)p == 0)
-			return true;
-	}
-}
 
 /* flide manager */
 static bool
@@ -121,17 +106,9 @@ allocate_fd (void) {
 	return __fd;
 }
 
-static void deref_file_obj (struct file_obj *obj) {
-	if (--obj->ref_cnt == 0) {
-		file_close (obj->file);
-		free (obj);
-	}
-}
 
 bool clean_filde (struct file_des *filde) {
 	if (filde) {
-		if (filde->type == FILE)
-			deref_file_obj (filde->obj);
 		free (filde);
 		return true;
 	}
@@ -142,10 +119,6 @@ static uint64_t
 fork (struct intr_frame *f) {
 	char *name = (char *) f->R.rdi;
 
-	if (!validate_string (name)){
-		thread_current ()->exit_status = -1;
-		thread_exit ();
-	}
 
 	lock_acquire(&filesys_lock);
 	tid_t tid = process_fork (name, f);
@@ -161,11 +134,6 @@ static int exec (struct intr_frame *f) {
 	const char *delimeter = " ";
 
 	const char *fname = (const char *) f->R.rdi;
-
-	if (!validate_string (fname)){
-		thread_current ()->exit_status = -1;
-		thread_exit ();
-	}
 
 	fn_copy = palloc_get_page (0);
 	if (fn_copy == NULL)
@@ -184,16 +152,31 @@ static int exec (struct intr_frame *f) {
 }
 
 static int create(struct intr_frame *f) {
-	const char *file = (const char *) f->R.rdi;
+	const char *file_name = (const char *) f->R.rdi;
 	unsigned initial_size = (unsigned) f->R.rsi;
 
-	if (!validate_string (file)){
+	char *copy_file_name = (char *) file_name;
+
+	if (file_name == NULL || !is_user_vaddr (file_name) ){ // check if file is valid
 		thread_current ()->exit_status = -1;
 		thread_exit ();
+		return -1;
 	}
 
+	// file 이름 끝이 null로 끝나는지 확인
+	while (*copy_file_name != '\0') {
+		if (!is_user_vaddr (copy_file_name)) {
+			thread_current ()->exit_status = -1;
+			thread_exit ();
+			return -1;
+		}
+		copy_file_name++;
+	}
+
+	// TODO: create-bad-ptr test case
+
 	lock_acquire (&filesys_lock);
-	bool success = filesys_create (file, initial_size);
+	bool success = filesys_create (file_name, initial_size);
 	lock_release (&filesys_lock);
 
 	return success;
@@ -205,10 +188,7 @@ static int halt (void) {
 }
 
 int remove(const char *file) {
-	if (!validate_string (file)){
-		thread_current ()->exit_status = -1;
-		thread_exit ();
-	}
+
 
 	lock_acquire (&filesys_lock);
 	bool success = filesys_remove (file);
@@ -217,19 +197,20 @@ int remove(const char *file) {
 	return success;
 }
 
-static uint64_t
-open (struct intr_frame *f) {
-	const char *fname = (const char *) f->R.rdi;
+int open (struct intr_frame *f) {
+	const char *file_name = (const char *) f->R.rdi;
 	struct thread *t = thread_current ();
 	struct file *file;
 	struct file_des *filde;
 	int fd;
 	int ret = -1;
 
-	if (!validate_string (fname)){
+	if (file_name == NULL || !is_user_vaddr (file_name)) {
 		thread_current ()->exit_status = -1;
 		thread_exit ();
+		return -1;
 	}
+
 
 	lock_acquire(&filesys_lock); // lock the file system
 
@@ -237,7 +218,7 @@ open (struct intr_frame *f) {
 
 	// msg("DEBUG: open. fd: %d", fd);
 	if (fd) {
-		file = filesys_open(fname);
+		file = filesys_open(file_name);
     // TODO
 		
 	}
@@ -279,22 +260,9 @@ read (struct intr_frame *f) {
 
 	// msg("DEBUG: read. fd: %d", fd);
 
-	if (filde) {
-		switch (filde->type) {
-			case STDIN:
-				ret = -1;
-				for (size_t read_bytes = 0; read_bytes < size; read_bytes++)
-					buf[read_bytes] = input_getc();
-				break;
-			case STDOUT:
-				ret = -1;
-				break;
+	if (filde) ret = file_read (filde->obj->file, buf, size);
+	else ret = -1;
 
-			default: // just reading
-				ret = file_read (filde->obj->file, buf, size);
-				break;
-		}
-	}
 
 	// unlock the file system
 	lock_release (&filesys_lock);
@@ -363,21 +331,39 @@ tell (struct intr_frame *f) {
 }
 
 
-static uint64_t
-close (struct intr_frame *f) {
-	int32_t fd = f->R.rdi;
-	int ret = -1;
+int close (struct intr_frame *f) {
+	struct thread *cur = thread_current();
+    struct list_elem *e;
+	int fd = f->R.rdi; // ?
+	int ret = 1;
 
-	lock_acquire (&filesys_lock);
-	struct file_des *filde = find_filde_by_fd (fd);
-	if (filde) {
-		list_remove (&filde->elem);
-		ret = clean_filde (filde);
-	}
-	lock_release (&filesys_lock);
+    for (e = list_begin(&cur->fd_list); e != list_end(&cur->fd_list); e = list_next(e)) {
+        struct file_des *fd_struct = list_entry(e, struct file_des, elem);
+        
+        if (fd_struct->fd == fd) {
+            file_close(fd_struct->obj->file);      // 파일 닫기
+            list_remove(e);                   // 리스트에서 제거
+            free(fd_struct);                  // 메모리 해제
+        }
+
+
+    }
+	// int32_t fd = f->R.rdi; // file descriptor
+	// struct file_des *filde = find_filde_by_fd (fd);
+	// int ret = -1;
+	// if (filde == NULL) {
+	// 	return ret;
+	// }
+
+	// lock_acquire (&filesys_lock);
+	
+
+	// list_remove (&filde->elem);
+	// ret = clean_filde (filde);
+	
+	// lock_release (&filesys_lock);
 	return ret;
 }
-
 
 
 
@@ -405,10 +391,10 @@ syscall_handler (struct intr_frame *f) {
 			f->R.rax = process_wait(f->R.rdi);
 			break;
 		case SYS_CREATE:
-			f->R.rax = create (f);
+			f->R.rax = create(f);
 			break;
 		case SYS_REMOVE:
-			f->R.rax = remove (f);
+			f->R.rax = remove(f);
 			break;
 		case SYS_OPEN:
 			f->R.rax = open (f);

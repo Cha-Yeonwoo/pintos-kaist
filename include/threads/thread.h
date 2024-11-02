@@ -181,18 +181,6 @@ void mlfqs_recent_cpu_recalculate(void);
 
 void do_iret (struct intr_frame *tf);
 
-/* For file */
-struct file_obj {
-	struct file *file;
-	int ref_cnt;
-};
-
-struct file_des { // file descriptor
-	enum { STDIN, STDOUT, FILE } type;
-	int fd;
-	struct list_elem elem;
-	struct file_obj *obj;
-};
 
 
 #endif /* threads/thread.h */
