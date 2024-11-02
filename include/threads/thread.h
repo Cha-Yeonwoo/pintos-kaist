@@ -97,6 +97,7 @@ struct thread {
 
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem;              /* List element. */
+	struct list *list_containing;
 
 	/* Advanced Scheduler */
 	int nice;
@@ -160,6 +161,7 @@ int thread_get_load_avg (void);
 bool cmp_priority (const struct list_elem *a, const struct list_elem *b);
 bool cmp_priority_lock (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
 void compare_and_yield (void);
+void compare_and_yield_on_return (void);
 
 void mlfqs_load_avg (void);
 void mlfqs_priority_recalculate (void);

@@ -176,8 +176,12 @@ process_exec (void *f_name) {
 	/* We first kill the current context */
 	process_cleanup ();
 
+	
+
 	/* And then load the binary */
 	success = load (file_name, &_if);
+
+	
 
 	/* If load failed, quit. */
 	palloc_free_page (file_name);
@@ -185,6 +189,12 @@ process_exec (void *f_name) {
 		return -1;
 
 	/* Start switched process. */
+	/* load을 하면, ehdr.e_entry가 _if->rip에 설정됨.
+	   예를 들어 ehdr.e_entry = 1000이면
+	   _if->rip = 1000이 됨
+	   여기서 _if는 intr_frame : rsp가 if_->rip, 즉 1000을 가리킴 
+	   iretq 명령어를 실행하면 rip register에 이 rip가 저장됨. 
+	   즉, ehdr.e_entry값부터 실행되게끔 만든다. */
 	do_iret (&_if);
 	NOT_REACHED ();
 }
@@ -335,8 +345,16 @@ load (const char *file_name, struct intr_frame *if_) {
 		goto done;
 	process_activate (thread_current ());
 
+	// file_name? tokenize 한 후, 처음 것을 갖다 쓰면 됨
+	char *parse_name;
+	char *token = strtok_r((char *) file_name, " ", &parse_name);
+	if (token == NULL) {
+		printf ("load: %s: open failed\n", file_name);
+		goto done;
+	}
+
 	/* Open executable file. */
-	file = filesys_open (file_name);
+	file = filesys_open (token);
 	if (file == NULL) {
 		printf ("load: %s: open failed\n", file_name);
 		goto done;
@@ -387,13 +405,13 @@ load (const char *file_name, struct intr_frame *if_) {
 					uint32_t read_bytes, zero_bytes;
 					if (phdr.p_filesz > 0) {
 						/* Normal segment.
-						 * Read initial part from disk and zero the rest. */
+						* Read initial part from disk and zero the rest. */
 						read_bytes = page_offset + phdr.p_filesz;
 						zero_bytes = (ROUND_UP (page_offset + phdr.p_memsz, PGSIZE)
 								- read_bytes);
 					} else {
 						/* Entirely zero.
-						 * Don't read anything from disk. */
+						* Don't read anything from disk. */
 						read_bytes = 0;
 						zero_bytes = ROUND_UP (page_offset + phdr.p_memsz, PGSIZE);
 					}
@@ -412,12 +430,50 @@ load (const char *file_name, struct intr_frame *if_) {
 		goto done;
 
 	/* Start address. */
-	if_->rip = ehdr.e_entry;
+	if_->rip = ehdr.e_entry; 
 
-	/* TODO: Your code goes here.
-	 * TODO: Implement argument passing (see project2/argument_passing.html). */
 
 	success = true;
+
+	// 여기에 추가. rsp를 바꿔야 한다. argument passing으로!
+	// token이 몇 개 있지...? 길이는 얼마..?
+	int argc = 0;
+	int arglen = 0;
+	for (token = strtok_r((char *) file_name, " ", &parse_name);
+	token != NULL; 
+	token = strtok_r (NULL, " ", &parse_name)) { 
+		argc += 1;
+		arglen += (strlen(token) + 1);
+	} 
+	// rsp를 얼마나 내려야 하는가?
+	// arglen + (argc + 2) * sizeof(char *) + alpha(8의 배수를 만들기 위한 align)
+	while ((arglen % 8) != 0) { arglen += 1; }
+
+	// if_->rsp는 uintptr = uint64 type. 따라서 그냥 그대로 빼준다.
+	uintptr_t rsp_up = if_->rsp;
+	if_->rsp = if_->rsp - arglen - (argc + 2) * 8;
+	*((void **) if_->rsp) = NULL; // return address
+
+	uintptr_t rsp_down = (if_->rsp) + 8;
+	for (token = strtok_r(file_name, " ", &parse_name);
+	token != NULL; 
+	token = strtok_r (NULL, " ", &parse_name)) {
+		rsp_up -= (strlen(token) + 1); 
+		size_t s = strlcpy ((char *) rsp_up, token, strlen(token) + 1);
+		ASSERT (s == strlen(token));
+		*((char **) rsp_down) = (char *) rsp_up;
+		rsp_down += 8;
+	} 
+	*((char **) rsp_down) = NULL;
+	ASSERT (rsp_up >= rsp_down);
+	ASSERT (rsp_up - rsp_down < 8);
+	while (rsp_up > rsp_down) {
+		*((uint8_t *) rsp_down) = (uint8_t) 0;
+		rsp_down += 1;
+	}
+
+	if_->R.rsi = (if_->rsp) + 8;
+	if_->R.rdi = argc;
 
 done:
 	/* We arrive here whether the load is successful or not. */

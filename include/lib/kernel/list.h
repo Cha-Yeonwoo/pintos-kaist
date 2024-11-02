@@ -87,9 +87,6 @@
 struct list_elem {
 	struct list_elem *prev;     /* Previous list element. */
 	struct list_elem *next;     /* Next list element. */
-
-   // unique.k 10051637
-   struct list* list_containing;
 };
 
 /* List. */

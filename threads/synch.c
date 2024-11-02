@@ -68,6 +68,7 @@ sema_down (struct semaphore *sema) {
 	while (sema->value == 0) {
 		// list_push_back (&sema->waiters, &thread_current ()->elem);
 		list_insert_ordered(&sema->waiters, &thread_current ()->elem, &cmp_priority, NULL);
+      thread_current()->list_containing=&(sema->waiters);
 		thread_block ();
 	}
 	sema->value--;
@@ -113,12 +114,18 @@ sema_up (struct semaphore *sema) {
 	if (!list_empty (&sema->waiters)){
 		// list_sort(&sema->waiters, (list_less_func *) &cmp_priority, NULL); 여기에 문제가 있다....
       struct thread *t = list_entry (list_pop_front (&sema->waiters), struct thread, elem);
+      t->list_containing = NULL;
       if (t->status == THREAD_BLOCKED) { // assertion 막기 위해.. 필요한건지는 검토필요.
          thread_unblock (t);
       }
 	}
 	sema->value++;
-   compare_and_yield();
+   if (!intr_context()) {
+      compare_and_yield();
+   } else {
+      compare_and_yield_on_return();
+   }
+   
 	intr_set_level (old_level);
    
    
@@ -435,8 +442,8 @@ void sort_all(struct thread *t) {
    list_sort(&t->lock_list, (list_less_func *) &cmp_priority_lock, NULL);
    
    // 2. t->elem가 list의 element이면, 그 list를 sort
-   if (t->elem.list_containing != NULL) {
-      list_sort(t->elem.list_containing, (list_less_func *) &cmp_priority, NULL);
+   if (t->list_containing != NULL) {
+      list_sort(t->list_containing, (list_less_func *) &cmp_priority, NULL);
    }
    
    // 3. t가 lock에 의해 막혀 있다면, 그 lock의 holder도 priority가 바뀔 수 있음

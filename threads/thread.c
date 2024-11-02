@@ -176,6 +176,7 @@ thread_tick (int64_t ticks) {
 		ASSERT (th != NULL);
 		if (th->timeToWakeUp <= ticks) {
 			sleepingElem = list_remove(sleepingElem);
+			th->list_containing = NULL;
 			thread_unblock(th);
 			th->timeToWakeUp = 0;
 		} else {
@@ -306,6 +307,7 @@ thread_unblock (struct thread *t) {
 	ASSERT (t->status == THREAD_BLOCKED);
 	// list_push_back (&ready_list, &t->elem); // (단순히) 맨 뒤가 아니라 pirority에 따라서 정렬해야 함!
 	list_insert_ordered(&ready_list, &t->elem, &cmp_priority, NULL);
+	t->list_containing = &ready_list;
 
 	t->status = THREAD_READY;
 	intr_set_level (old_level);
@@ -371,9 +373,12 @@ thread_yield (void) {
 	ASSERT (!intr_context ());
 
 	old_level = intr_disable ();
-	if (curr != idle_thread)
+	if (curr != idle_thread) {
 		// list_push_back (&ready_list, &curr->elem);
 		list_insert_ordered(&ready_list, &curr->elem, &cmp_priority, NULL); 
+		curr->list_containing = &ready_list;
+	}
+		
 	do_schedule (THREAD_READY); // context switch
 	intr_set_level (old_level); // 
 }
@@ -404,6 +409,7 @@ thread_sleep (int64_t tickWakeUp) {
 	curr->timeToWakeUp = tickWakeUp;
 	// list_push_back (&sleep_list, &curr->elem); // (단순히) 맨 뒤가 아니라 pirority에 따라서 정렬해야 함!
 	list_insert_ordered(&sleep_list, &curr->elem, &cmp_priority, NULL);
+	curr->list_containing = &sleep_list;
 	thread_block(); // block 하면 얘가 schedule()을 실행함
 	intr_set_level (old_level);
 }
@@ -561,6 +567,7 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->magic = THREAD_MAGIC;
 	t->timeToWakeUp = 0;
 	t->lock_waiting = NULL;
+	t->list_containing = NULL;
 
 	if (running_thread() != initial_thread) {
 		t->nice = thread_current()->nice;
@@ -586,7 +593,9 @@ next_thread_to_run (void) {
 		return idle_thread;
 	else {
 		list_sort(&ready_list, (list_less_func *) cmp_priority, NULL);
-		return list_entry (list_pop_front (&ready_list), struct thread, elem);
+		struct thread* th = list_entry (list_pop_front (&ready_list), struct thread, elem);
+		th->list_containing = NULL;
+		return th;
 	}
 		
 }
@@ -699,6 +708,7 @@ do_schedule(int status) {
 	while (!list_empty (&destruction_req)) {
 		struct thread *victim =
 			list_entry (list_pop_front (&destruction_req), struct thread, elem);
+		victim->list_containing = NULL;
 		palloc_free_page(victim);
 	}
 	thread_current ()->status = status;
@@ -736,6 +746,7 @@ schedule (void) {
 			ASSERT (curr != next);
 			// list_push_back (&destruction_req, &curr->elem);
 			list_insert_ordered(&destruction_req, &curr->elem, &cmp_priority, NULL);
+			curr->list_containing = &destruction_req;
 		}
 
 		/* Before switching the thread, we first save the information
@@ -789,6 +800,12 @@ void compare_and_yield (void) {
 	}
 }
 
+void compare_and_yield_on_return (void) {
+	struct thread *curr = thread_current();
+	if (!list_empty(&ready_list) && curr->priority < list_entry(list_front(&ready_list), struct thread, elem)->priority) {
+		intr_yield_on_return();
+	}
+}
 
 
 /* mlfqs things */
