@@ -580,6 +580,12 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->original_priority = priority;
 	t->priority = priority;
 	list_init(&t->lock_list);
+
+#ifdef USERPROG
+	list_init (&t->child_list);
+	list_init (&t->fd_list);
+	lock_init (&t->child_lock);
+#endif
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should

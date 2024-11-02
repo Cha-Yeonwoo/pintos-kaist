@@ -5,6 +5,7 @@
 #include <list.h>
 #include <stdint.h>
 #include "threads/interrupt.h"
+#include "threads/synch.h"
 #ifdef VM
 #include "vm/vm.h"
 #endif
@@ -109,6 +110,17 @@ struct thread {
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
 	uint64_t *pml4;                     /* Page map level 4 */
+	struct file *executable;
+	int exit_status;
+	struct semaphore wait_sema;
+	struct semaphore cleanup_ok;
+	struct list_elem child_elem;
+	struct list child_list;
+	struct lock child_lock;
+
+	struct list fd_list;
+	bool wait_on_exit;
+	
 #endif
 #ifdef VM
 	/* Table for whole virtual memory owned by thread. */
@@ -168,5 +180,19 @@ void mlfqs_priority_recalculate (void);
 void mlfqs_recent_cpu_recalculate(void);
 
 void do_iret (struct intr_frame *tf);
+
+/* For file */
+struct file_obj {
+	struct file *file;
+	int ref_cnt;
+};
+
+struct file_des { // file descriptor
+	enum { STDIN, STDOUT, FILE } type;
+	int fd;
+	struct list_elem elem;
+	struct file_obj *obj;
+};
+
 
 #endif /* threads/thread.h */
