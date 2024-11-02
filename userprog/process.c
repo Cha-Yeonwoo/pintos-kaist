@@ -243,6 +243,7 @@ static void
 __do_fork (void *aux_) {
 	struct intr_frame if_;
 	struct fork_aux *aux = (struct fork_aux *) aux_;
+
 	struct thread *parent = aux->parent;
 	struct thread *current = thread_current ();
 	/* TODO: somehow pass the parent_if. (i.e. process_fork()'s if_) */

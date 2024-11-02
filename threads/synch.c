@@ -119,14 +119,14 @@ sema_up (struct semaphore *sema) {
 	struct thread *th = NULL;
 	if (!list_empty (&sema->waiters)) {
 		struct list_elem *elem =
-			list_max (&sema->waiters, compare_priority, NULL);
+			list_max (&sema->waiters, cmp_priority, NULL);
 		th = list_entry(elem, struct thread, elem);
 		list_remove (elem);
 		thread_unblock (th);
 	}
 	sema->value++;
 	if (!intr_context () && th &&
-			th->effective_priority > thread_current ()->effective_priority)
+			th->priority > thread_current ()->priority)
 		thread_yield();
 	intr_set_level (old_level);
 }
@@ -199,7 +199,7 @@ compare_priority_in_lock (const struct list_elem *A,
 		const struct list_elem *B, void *aux UNUSED) {
     const struct thread *threadA = list_entry (A, struct thread, lock_elem);
     const struct thread *threadB = list_entry (B, struct thread, lock_elem);
-    return threadA->effective_priority < threadB->effective_priority;
+    return threadA->priority < threadB->priority;
 }
 
 /* get maximum priority between holding locks' waiters */
@@ -216,11 +216,11 @@ compare_priority_in_locks (const struct list_elem *A,
 
 /* donate priority to holder to max priority of waiters */
 static void
-donate_effective_priority (struct thread *holder) {
-	holder->effective_priority = holder->priority;
-	if (!list_empty (&holder->locks)) {
+donate_priority (struct thread *holder) {
+	holder->priority = holder->original_priority;
+	if (!list_empty (&holder->lock_list)) {
 		struct lock *l = list_entry (
-				list_max (&holder->locks, compare_priority_in_locks, NULL),
+				list_max (&holder->lock_list, compare_priority_in_locks, NULL),
 				struct lock, elem);
 		if (list_empty(&l->waiters))
 			return;
@@ -228,11 +228,11 @@ donate_effective_priority (struct thread *holder) {
 				list_max (&l->waiters, compare_priority_in_lock, NULL),
 				struct thread, lock_elem);
 
-		if (t && t->effective_priority > holder->effective_priority) {
-			holder->effective_priority = t->effective_priority;
-			struct lock *l = holder->waiting_lock;
+		if (t && t->priority > holder->priority) {
+			holder->priority = t->priority;
+			struct lock *l = holder->wait_lock;
 			if (l && l->holder)
-				donate_effective_priority (l->holder);
+				donate_priority (l->holder);
 		}
 	}
 }
@@ -267,17 +267,17 @@ lock_acquire (struct lock *lock) {
 	if (holder) {
 		/* insert current thread into lock */
 		list_push_back (&lock->waiters, &cur->lock_elem);
-		cur->waiting_lock = lock;
-		donate_effective_priority (holder);
+		cur->wait_lock = lock;
+		donate_priority (holder);
 	}
 	sema_down (&lock->semaphore);
 
 	/* remove current thread from waiting list */
 	if (holder)
 		list_remove (&cur->lock_elem);
-	cur->waiting_lock = NULL;
+	cur->wait_lock = NULL;
 	/* insert current lock into holding locks list */
-	list_push_back (&cur->locks, &lock->elem);
+	list_push_back (&cur->lock_list, &lock->elem);
 	lock->holder = cur;
 	/* Solution done. */
 }
@@ -321,7 +321,7 @@ lock_release (struct lock *lock) {
 	struct thread *holder = lock->holder;
 	list_remove (&lock->elem);      /* remove lock from holding list */
 	lock->holder = NULL;
-	donate_effective_priority (holder); /* recalculate priority */
+	donate_priority (holder); /* recalculate priority */
 	/* Solution done. */
 	sema_up (&lock->semaphore);
 }
@@ -401,12 +401,12 @@ compare_priority_cond (const struct list_elem *A,
 	const struct thread *threadB;
 
 	threadA = list_entry (
-			list_max (&semaphoreA->waiters, compare_priority, NULL),
+			list_max (&semaphoreA->waiters, cmp_priority, NULL),
 			struct thread, elem);
 	threadB = list_entry (
-			list_max (&semaphoreB->waiters, compare_priority, NULL),
+			list_max (&semaphoreB->waiters, cmp_priority, NULL),
 			struct thread, elem);
-	return threadA->priority < threadB->priority;
+	return threadA->original_priority < threadB->original_priority;
 }
 /* Solution done. */
 

@@ -6,7 +6,7 @@
 #include <stdint.h>
 #include "threads/synch.h"
 #include "threads/interrupt.h"
-#include "threads/fixed-point.h"
+#include "threads/fixed_point.h"
 #ifdef VM
 #include "vm/vm.h"
 #endif
@@ -109,14 +109,12 @@ struct thread {
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem;              /* List element. */
 	/* Solution */
-	int64_t ticks;                      /* Saved ticks */
-	int effective_priority;             /* Effective Priority */
+	int64_t timeToWakeUp;                      /* Saved ticks */
+	int original_priority;             
 	struct list_elem lock_elem;         /* for waiters in struct lock */
-	struct list locks;                  /* List of locks thread hold */
+	struct list lock_list;                  /* List of locks thread hold */
 
-	struct lock *waiting_lock;
-	struct thread *donator;
-	struct thread *donatee;
+	struct lock *wait_lock;
 	int nice;
 	FP recent_cpu;
 	/* Solution done. */
@@ -151,8 +149,8 @@ struct thread {
 extern bool thread_mlfqs;
 
 /* Solution */
-struct list block_list;
-bool compare_priority (const struct list_elem *A,
+struct list sleep_list;
+bool cmp_priority (const struct list_elem *A,
 		const struct list_elem *B, void *aux UNUSED);
 
 /* Solution done. */
@@ -161,7 +159,7 @@ bool compare_priority (const struct list_elem *A,
 void thread_init (void);
 void thread_start (void);
 
-void thread_tick (void);
+void thread_tick (int64_t ticks);
 void thread_print_stats (void);
 
 typedef void thread_func (void *aux);

@@ -91,7 +91,7 @@ static bool compare_tick (const struct list_elem *A,
 		const struct list_elem *B, void *aux UNUSED) {
 	const struct thread *threadA = list_entry (A, struct thread, elem);
 	const struct thread *threadB = list_entry (B, struct thread, elem);
-	return threadA->ticks < threadB->ticks;
+	return threadA->timeToWakeUp < threadB->timeToWakeUp;
 }
 /* Suspends execution for approximately TICKS timer ticks. */
 void
@@ -99,15 +99,9 @@ timer_sleep (int64_t ticks) {
 	int64_t start = timer_ticks ();
 
 	ASSERT (intr_get_level () == INTR_ON);
-	// while (timer_elapsed (start) < ticks)
-	// 	thread_yield ();
-		/* Solution */
-	struct thread *th = thread_current ();
-	enum intr_level old_level = intr_disable ();
-	th->ticks = ticks + start;
-	list_insert_ordered (&block_list, &th->elem, compare_tick, NULL);
-	thread_block ();
-	intr_set_level(old_level);
+	if (timer_elapsed(start)<ticks){
+		thread_sleep(start+ticks);
+	}
 }
 
 /* Suspends execution for approximately MS milliseconds. */
@@ -138,18 +132,18 @@ timer_print_stats (void) {
 static void
 timer_interrupt (struct intr_frame *args UNUSED) {
 	ticks++;
-	thread_tick ();
+	thread_tick (ticks);
 	/* Solution */
 	struct thread *th;
 
-	while (!list_empty (&block_list)) {
-		th = list_entry (list_front (&block_list), struct thread, elem);
-		if (ticks >= th->ticks) {
-			list_pop_front (&block_list);
-			thread_unblock (th);
-		} else
-			break;
-	}
+	// while (!list_empty (&sleep_list)) {
+	// 	th = list_entry (list_front (&sleep_list), struct thread, elem);
+	// 	if (ticks >= th->timeToWakeUp) {
+	// 		list_pop_front (&sleep_list);
+	// 		thread_unblock (th);
+	// 	} else
+	// 		break;
+	// }
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer
