@@ -164,7 +164,7 @@ thread_start (void) {
 
 }
 
-/* Solution */
+
 static void
 thread_for_each (void (*action)(struct thread *)) {
 	struct list_elem *e;

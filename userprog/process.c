@@ -336,8 +336,46 @@ out_no_free:
 	/* Finally, switch to the newly created process. */
 	if (succ)
 		do_iret (&if_);
-error:
-	thread_exit ();
+// error:
+ 	thread_exit ();
+}
+
+
+void argument_stack(char **parse, int count, void **rsp) // 주소를 전달받았으므로 이중 포인터 사용
+{
+    // 프로그램 이름, 인자 문자열 push
+    for (int i = count - 1; i > -1; i--)
+    {
+        for (int j = strlen(parse[i]); j > -1; j--)
+        {
+            (*rsp)--;                      // 스택 주소 감소
+            **(char **)rsp = parse[i][j]; // 주소에 문자 저장
+        }
+        parse[i] = *(char **)rsp; // parse[i]에 현재 rsp의 값 저장해둠(지금 저장한 인자가 시작하는 주소값)
+    }
+
+    // 정렬 패딩 push
+    int padding = (int)*rsp % 8;
+    for (int i = 0; i < padding; i++)
+    {
+        (*rsp)--;
+        **(uint8_t **)rsp = 0; // rsp 직전까지 값 채움
+    }
+
+    // 인자 문자열 종료를 나타내는 0 push
+    (*rsp) -= 8;
+    **(char ***)rsp = 0; // char* 타입의 0 추가
+
+    // 각 인자 문자열의 주소 push
+    for (int i = count - 1; i > -1; i--)
+    {
+        (*rsp) -= 8; // 다음 주소로 이동
+        **(char ***)rsp = parse[i]; // char* 타입의 주소 추가
+    }
+
+    // return address push
+    (*rsp) -= 8;
+    **(void ***)rsp = 0; // void* 타입의 0 추가
 }
 
 /* Switch the current execution context to the f_name.
@@ -363,8 +401,8 @@ process_exec (void *f_name) {
 
 	/* If load failed, quit. */
 	palloc_free_page (file_name);
-	if (!success)
-		return -1;
+	// if (!success)
+	// 	return -1;
 	if (!success) {
 		thread_current ()->exit_status = -1;
 		thread_exit ();
@@ -411,6 +449,15 @@ process_wait (tid_t child_tid UNUSED) {
 	// return -1;
 
 	int status = -1;
+	// struct thread *child = get_child_by_id (thread_current (), child_tid);
+	// if (child) {
+	// 	sema_down (&child->wait_sema);
+	// 	list_remove (&child->child_elem);
+	// 	status = child->exit_status;
+	// 	sema_up (&child->cleanup_ok);
+	// }
+	
+// +	int status = -1;
 	struct thread *child = get_child_by_id (thread_current (), child_tid);
 	if (child) {
 		sema_down (&child->wait_sema);
@@ -419,6 +466,7 @@ process_wait (tid_t child_tid UNUSED) {
 		sema_up (&child->cleanup_ok);
 	}
 	return status;
+ 
 }
 
 /* Exit the process. This function is called by thread_exit (). */
@@ -622,12 +670,15 @@ load (char *file_name, struct intr_frame *if_) {
 	off_t file_ofs;
 	bool success = false;
 	int i;
+	// msg("DEBUG: load start");
 
 	/* Allocate and activate page directory. */
 	t->pml4 = pml4_create ();
 	if (t->pml4 == NULL)
 		goto done;
 
+
+	// msg("DEBUG: pml4_create success");
 	process_activate (thread_current ());
 
 	/* Open executable file. */
@@ -648,6 +699,8 @@ load (char *file_name, struct intr_frame *if_) {
 		printf ("load: %s: error loading executable\n", file_name);
 		goto done;
 	}
+
+	// msg("DEBUG: file read success");
 
 	/* Read program headers. */
 	file_ofs = ehdr.e_phoff;
@@ -702,6 +755,8 @@ load (char *file_name, struct intr_frame *if_) {
 		}
 	}
 
+	// msg("DEBUG: load segment success");
+
 	/* Set up stack. */
 	if (!setup_stack (if_))
 		goto done;
@@ -711,15 +766,13 @@ load (char *file_name, struct intr_frame *if_) {
 
 	/* Start address. */
 	if_->rip = ehdr.e_entry;
+	success = true;
 
 	/* TODO: Your code goes here.
 	 * TODO: Implement argument passing (see project2/argument_passing.html). */
 
-	success = true;
-
 done:
-	/* We arrive here whether the load is successful or not. */
-	// file_close (file);
+ 	/* We arrive here whether the load is successful or not. */
 	if (success) {
 		file_deny_write (file);
 		t->executable = file;
@@ -727,6 +780,9 @@ done:
 		file_close (file);
 		t->executable = NULL;
 	}
+	/* We arrive here whether the load is successful or not. */
+	// file_close (file);
+
 	return success;
 }
 

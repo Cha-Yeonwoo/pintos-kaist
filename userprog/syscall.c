@@ -165,8 +165,7 @@ SyS_fork (struct intr_frame *f) {
 	return tid;
 }
 
-static uint64_t
-SyS_exec (struct intr_frame *f) {
+static int exec (struct intr_frame *f) {
 	char *fn_copy;
 	char *unused;
 	const char *fname = (const char *) f->R.rdi;
@@ -189,20 +188,215 @@ SyS_exec (struct intr_frame *f) {
 	return -1;
 }
 
+static int create(struct intr_frame *f) {
+	const char *file = (const char *) f->R.rdi;
+	unsigned initial_size = (unsigned) f->R.rsi;
+
+	if (!validate_string (file))
+		error_die ();
+
+	lock_acquire (&filesys_lock);
+	bool success = filesys_create (file, initial_size);
+	lock_release (&filesys_lock);
+
+	return success;
+}
+
+static int halt (void) {
+	power_off ();
+	return -1;
+}
+
+int remove(const char *file) {
+	if (!validate_string (file))
+		error_die ();
+
+	lock_acquire (&filesys_lock);
+	bool success = filesys_remove (file);
+	lock_release (&filesys_lock);
+
+	return success;
+}
+
+static uint64_t
+open (struct intr_frame *f) {
+	const char *fname = (const char *) f->R.rdi;
+	struct thread *t = thread_current ();
+	struct file *file;
+	struct filde *filde;
+	int fd;
+	int ret = -1;
+
+	if (!validate_string (fname))
+		error_die ();
+
+	lock_acquire(&filesys_lock);
+	fd = allocate_fd ();
+	if (fd >= 0) {
+		file = filesys_open(fname);
+		if (file) {
+			filde = (struct filde *) malloc (sizeof (struct filde));
+			if (filde) {
+				struct file_obj *obj =
+					(struct file_obj *) malloc (sizeof (struct file_obj));
+				if (obj) {
+					ret = fd;
+					*obj = (struct file_obj) {
+						.file = file,
+						.ref_cnt = 1,
+					};
+					*filde = (struct filde) {
+						.fd = ret,
+						.obj = obj,
+						.type = FILE,
+					};
+					list_insert_ordered (&t->fd_list, &filde->elem, fd_sort, NULL);
+				} else
+					free (filde);
+			} else
+				file_close (file);
+		}
+	}
+	lock_release (&filesys_lock);
+	return ret;
+}
+
+static uint64_t
+filesize (struct intr_frame *f) {
+	int32_t fd = f->R.rdi;
+	struct filde *filde;
+	int ret = -1;
+
+	lock_acquire (&filesys_lock);
+	filde = get_filde_by_fd (fd);
+	if (filde)
+		ret = file_length (filde->obj->file);
+	lock_release (&filesys_lock);
+	return ret;
+}
+
+static uint64_t
+read (struct intr_frame *f) {
+	int fd = f->R.rdi;
+	char *buf = (char *) f->R.rsi;
+	size_t size = f->R.rdx;
+	size_t read_bytes = 0;
+	struct filde *filde;
+	int ret = -1;
+
+	if (!validate_ptr (buf, size, true))
+		error_die ();
+
+	lock_acquire (&filesys_lock);
+	filde = get_filde_by_fd (fd);
+	if (filde) {
+		switch (filde->type) {
+			case STDIN:
+				for (; read_bytes < size; read_bytes++)
+					buf[read_bytes] = input_getc ();
+				break;
+			case STDOUT:
+				ret = -1;
+				break;
+			default:
+				ret = file_read (filde->obj->file, buf, size);
+				break;
+		}
+	}
+	lock_release (&filesys_lock);
+	return ret;
+}
+
+static uint64_t
+write (struct intr_frame *f) {
+	int fd = f->R.rdi;
+	char *buf = (char *) f->R.rsi;
+	size_t size = f->R.rdx;
+	struct filde *filde;
+	int ret = -1;
+
+	if (!validate_ptr (buf, size, false))
+		error_die ();
+
+	lock_acquire (&filesys_lock);
+	filde = get_filde_by_fd (fd);
+	if (filde) {
+		switch (filde->type) {
+			case STDIN:
+				break;
+			case STDOUT:
+				putbuf (buf, size);
+				ret = size;
+				break;
+			default:
+				ret = file_write (filde->obj->file, buf, size);
+				break;
+		}
+	}
+	lock_release (&filesys_lock);
+	return ret;
+}
+
+static uint64_t
+seek (struct intr_frame *f) {
+	int32_t fd = f->R.rdi;
+	unsigned position = f->R.rsi;
+	struct filde *filde;
+
+	lock_acquire (&filesys_lock);
+	filde = get_filde_by_fd (fd);
+	if (filde && filde->obj)
+		file_seek (filde->obj->file, position);
+	lock_release (&filesys_lock);
+	return 0;
+}
+
+static uint64_t
+tell (struct intr_frame *f) {
+	int32_t fd = f->R.rdi;
+	struct filde *filde;
+	int ret = -1;
+
+	lock_acquire (&filesys_lock);
+	filde = get_filde_by_fd (fd);
+	if (filde && filde->obj)
+		ret = file_tell (filde->obj->file);
+	lock_release (&filesys_lock);
+	return ret;
+}
+
+
+
+static uint64_t
+__do_close (int fd) {
+	int ret = -1;
+
+	lock_acquire (&filesys_lock);
+	struct filde *filde = get_filde_by_fd (fd);
+	if (filde) {
+		list_remove (&filde->elem);
+		ret = clean_filde (filde);
+	}
+	lock_release (&filesys_lock);
+	return ret;
+}
+
+static uint64_t
+close (struct intr_frame *f) {
+	int32_t fd = f->R.rdi;
+	return __do_close (fd);
+}
+
+
 
 
 /* The main system call interface */
-// void
-// syscall_handler (struct intr_frame *f UNUSED) {
-// 	// TODO: Your implementation goes here.
-// 	printf ("system call!\n");
-// 	thread_exit ();
-// }
 void
 syscall_handler (struct intr_frame *f) {
+	// msg("DEBUG: syscall_handler. syscall number: %d", f->R.rax);
 	switch (f->R.rax) {
 		case SYS_HALT:
-			power_off ();
+			halt ();
 			NOT_REACHED ();
 			break;
 		case SYS_EXIT:
@@ -214,38 +408,38 @@ syscall_handler (struct intr_frame *f) {
 			f->R.rax = SyS_fork (f);
 			break;
 		case SYS_EXEC:
-			f->R.rax = SyS_exec (f);
+			f->R.rax = exec (f);
 			break;
 		case SYS_WAIT:
 			f->R.rax = process_wait(f->R.rdi);
 			break;
-		// case SYS_CREATE:
-		// 	f->R.rax = SyS_create (f);
-		// 	break;
-		// case SYS_REMOVE:
-		// 	f->R.rax = SyS_remove (f);
-		// 	break;
-		// case SYS_OPEN:
-		// 	f->R.rax = SyS_open (f);
-		// 	break;
-		// case SYS_FILESIZE:
-		// 	f->R.rax = SyS_filesize (f);
-		// 	break;
-		// case SYS_READ:
-		// 	f->R.rax = SyS_read (f);
-		// 	break;
-		// case SYS_WRITE:
-		// 	f->R.rax = SyS_write (f);
-		// 	break;
-		// case SYS_SEEK:
-		// 	f->R.rax = SyS_seek (f);
-		// 	break;
-		// case SYS_TELL:
-		// 	f->R.rax = SyS_tell (f);
-		// 	break;
-		// case SYS_CLOSE:
-		// 	f->R.rax = SyS_close (f);
-		// 	break;
+		case SYS_CREATE:
+			f->R.rax = create (f);
+			break;
+		case SYS_REMOVE:
+			f->R.rax = remove (f);
+			break;
+		case SYS_OPEN:
+			f->R.rax = open (f);
+			break;
+		case SYS_FILESIZE:
+			f->R.rax = filesize (f);
+			break;
+		case SYS_READ:
+			f->R.rax = read (f);
+			break;
+		case SYS_WRITE:
+			f->R.rax = write (f);
+			break;
+		case SYS_SEEK:
+			f->R.rax = seek (f);
+			break;
+		case SYS_TELL:
+			f->R.rax = tell (f);
+			break;
+		case SYS_CLOSE:
+			f->R.rax = close (f);
+			break;
 		// case SYS_DUP2:
 		// 	f->R.rax = SyS_dup2 (f);
 		// 	break;
