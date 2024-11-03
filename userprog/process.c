@@ -66,22 +66,27 @@ process_create_initd (const char *file_name) {
 	char *fn_copy;
 	char *unused;
 	tid_t tid;
+	const char *delimeter = " ";
 
 	/* Make a copy of FILE_NAME.
 	 * Otherwise there's a race between the caller and load(). */
 	fn_copy = palloc_get_page (0);
 	if (fn_copy == NULL)
 		return TID_ERROR;
-	strlcpy (fn_copy, file_name, PGSIZE);
+	// PGSIZE (4096)보다 작으면, fn_copy의 마지막에 null을 넣어준다.
+	strlcpy (fn_copy, file_name, PGSIZE); // copy the file name to fn_copy
+
 	if (strlen(file_name) < PGSIZE) {
 		fn_copy[strlen(file_name) + 1] = 0;
 	}
-	fn_copy = strtok_r(fn_copy, " ", &unused);
+	// strtok_r을 사용하여 fn_copy를 delimeter로 나눈다.
+	fn_copy = strtok_r(fn_copy, delimeter, &unused);
 
 	/* Create a new thread to execute FILE_NAME. */
 	// tid = thread_create (file_name, PRI_DEFAULT, initd, fn_copy);
 	struct initd_aux *aux =
 		(struct initd_aux *) malloc (sizeof (struct initd_aux));
+
 	aux->file_name = fn_copy;
 	aux->parent = thread_current ();
 	sema_init (&aux->dial, 0);
@@ -101,22 +106,20 @@ initd (void *aux_) {
 	char *f_name = aux->file_name;
 	struct thread *current = thread_current ();
 
-	/* STDIN */
 	struct file_des *filde = (struct file_des *) malloc (sizeof (struct file_des));
 	*filde = (struct file_des) {
 		.type = STDIN,
-		.fd = 0,
+		.fd = 0, // in일 경우 0
 	};
 	list_push_back (&current->fd_list, &filde->elem);
 
-	/* STDOUT */
 	filde = (struct file_des *) malloc (sizeof (struct file_des));
 	*filde = (struct file_des) {
 		.type = STDOUT,
-		.fd = 1,
+		.fd = 1, // out일 경우 1
 	};
 
-	list_push_back (&current->fd_list, &filde->elem);
+	list_push_back (&current->fd_list, &filde->elem); // push back the file descriptor to the fd_list
 
 #ifdef VM
 	supplemental_page_table_init (&thread_current ()->spt);
@@ -200,9 +203,9 @@ struct fd_map {
 	int size;
 	int i;
 	struct entry {
-		struct file_obj *parent;
-		struct file_obj *child;
-	} entries[0];
+		struct file *parent;
+		struct file *child;
+	} entries[0];  // 크기가 정해지지 않은 배열
 };
 
 /* A structure that maps the parent's file descriptor to the child's file
@@ -217,7 +220,7 @@ static struct fd_map * new_map (struct list *l) {
 	return fd_maps;
 }
 
-static bool fd_map_add (struct fd_map *fd_map, struct file_obj *p, struct file_obj *c) {
+static bool fd_map_add (struct fd_map *fd_map, struct file *p, struct file *c) {
 	if (fd_map->i >= fd_map->size)
 		return false;
 	fd_map->entries[fd_map->i].parent = p;
@@ -226,8 +229,8 @@ static bool fd_map_add (struct fd_map *fd_map, struct file_obj *p, struct file_o
 	return true;
 }
 
-static struct file_obj *
-fd_map_lookup (struct fd_map *fd_map, struct file_obj *f) {
+static struct file *
+fd_map_lookup (struct fd_map *fd_map, struct file *f) {
 	for (int index = 0; index < fd_map->i; index++) {
 		if (fd_map->entries[index].parent == f)
 			return fd_map->entries[index].child;
@@ -282,7 +285,7 @@ __do_fork (void *aux_) {
 	 *       the resources of parent.*/
 
 	/* Duplicate FDs: the parent holds the filesystem lock */
-	struct file_obj *new_file_obj; // new file object
+	struct file *new_file; // new file object
 	struct list_elem *e;
 	struct file_des *filde;
 	struct list *fd_list = &parent->fd_list;
@@ -300,26 +303,23 @@ __do_fork (void *aux_) {
 		*new_filde = *filde;
 
 		if (filde->type == FILE) {
-			new_file_obj = fd_map_lookup (map, filde->obj); // check the file object is already duplicated
-			if (!new_file_obj) {
-				new_file_obj = (struct file_obj *) malloc (sizeof (struct file_obj));
-				if (new_file_obj) {
-					new_file_obj->file = file_duplicate (filde->obj->file);
-					new_file_obj->ref_cnt = 0;
+			new_file = fd_map_lookup (map, filde->file); // check the file object is already duplicated
+			if (new_file) {			
 			
-					if (map->size > map->i){
-						map->entries[map->i].parent = filde->obj;
-						map->entries[map->i].child = new_file_obj;
-						map->i++;
-					}
+				new_file = file_duplicate (filde->file);	
+				if (map->size > map->i){
+					map->entries[map->i].parent = filde->file;
+					map->entries[map->i].child = new_file;
+					map->i++;
+				}
 
-				} else {
-					free (new_filde);
-					goto out;
+			else {
+				free (new_filde);
+				goto out;
 				}
 			}
-			new_file_obj->ref_cnt++;
-			new_filde->obj = new_file_obj;
+			// new_file_obj->ref_cnt++;
+			new_filde->file = new_file; 
 		}
 		list_push_back (&current->fd_list, &new_filde->elem);
 	}
@@ -450,7 +450,7 @@ process_exit (void) {
 	struct list_elem *e;
 	while (!list_empty (&thread_current ()->fd_list)) {
 		e = list_pop_front (&thread_current ()->fd_list);
-		clean_filde (list_entry (e, struct file_des, elem));
+		free (list_entry (e, struct file_des, elem));
 	}
 
 	while (!list_empty (&thread_current ()->child_list)) {

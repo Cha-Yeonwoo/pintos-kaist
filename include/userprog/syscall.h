@@ -7,16 +7,13 @@
 void syscall_init (void);
 
 /* For file */
-struct file_obj {
-	struct file *file;
-	int ref_cnt;
-};
+
 
 struct file_des { // file descriptor
-	enum { STDIN, STDOUT, FILE } type;
+	enum { STDIN, STDOUT, FILE } type; 
 	int fd;
 	struct list_elem elem; // 리스트에서의 위치
-	struct file_obj *obj;
+	struct file *file;
 };
 
 
