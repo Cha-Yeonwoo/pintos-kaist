@@ -214,14 +214,21 @@ int open (struct intr_frame *f) {
 
 	lock_acquire(&filesys_lock); // lock the file system
 
-	fd = allocate_fd ();
 
-	// msg("DEBUG: open. fd: %d", fd);
-	if (fd) {
-		file = filesys_open(file_name);
-    // TODO
-		
+	file = filesys_open(file_name);
+	if  (file == NULL) {
+		lock_release (&filesys_lock);
+		return ret;
 	}
+	fd = allocate_fd ();
+	if (fd < 0) { // Fd 할당 실패
+		file_close (file);
+		lock_release (&filesys_lock);
+		return ret;
+	}
+
+	ret = 0;
+
 	lock_release (&filesys_lock);
 	return ret;
 }
