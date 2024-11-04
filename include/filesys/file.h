@@ -3,6 +3,8 @@
 
 #include "filesys/off_t.h"
 #include <stdbool.h>
+#include <list.h>
+
 
 struct inode;
 

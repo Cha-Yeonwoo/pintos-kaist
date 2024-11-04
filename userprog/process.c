@@ -220,6 +220,7 @@ struct fd_map {
 		struct file *parent;
 		struct file *child;
 	} entries[0];  // 크기가 정해지지 않은 배열
+	int size;
 };
 
 
@@ -274,14 +275,17 @@ __do_fork (void *aux_) { // parent 정보 받아야함. interupt frame
 	struct list *fd_list = &parent->fd_list;
 
 
-	struct fd_map *map = (struct fd_map *) malloc (sizeof (struct fd_map) + sizeof (struct entry) * list_size(fd_list));
-	if (!map)
-		goto out;
+	
 
 	for (e = list_begin (fd_list); e != list_end (fd_list); e = list_next (e)) {
 		filde = list_entry (e, struct file_des, elem);
 		struct file_des *new_filde = (struct file_des *) malloc (sizeof (struct file_des));
-		new_filde->is_copied = false; // copy되었는지 확인하는 flag
+
+		if (!new_filde) {
+			free_flag = true;
+			goto out;
+		}
+		// new_filde->is_copied = false; // copy되었는지 확인하는 flag
 		if (!new_filde){
 			free_flag = true;
 			goto out;
@@ -291,36 +295,40 @@ __do_fork (void *aux_) { // parent 정보 받아야함. interupt frame
 
 		if (filde->type == FILE) {
 			// new_file = fd_map_lookup (map, filde->file); // check the file object is already duplicated
-			bool found_file = false;
-			for (int i = 0; i < list_size(fd_list); i++) {
-				if (map->entries[i].parent == filde->file){
-					new_file = map->entries[i].child;
-					found_file = true;
-					break;
-				}
-			}
+		
+			// // 논리가 틀린건 아닌데 비효율적
+			// for (int i = 0; i < list_size(fd_list); i++) {
+			// 	if (map->entries[i].parent == filde->file){ // entry에 이미 있는 경우
+			// 		new_file = map->entries[i].child; // 
+			// 		found_file = true;
+			// 		break;
+			// 	}
+			// } 있든 없든 결론은 똑같은거 아닌가?
 
-			if (!found_file){
-				// new_file = (struct file *) calloc (1, sizeof (struct file *));
-				new_file = (struct file *) malloc (sizeof (struct file));
-				new_filde->is_copied = true;
-				if (new_file) {			
+	
+			new_file = file_duplicate (filde->file); // file_duplicate을 통해 file object를 복사한다.
+				// 뜯어보면,
+				// file_duplicate -> file_open -> calloc
+	
+				// new_file MUST BE FREED at the close time
 				
-					new_file = file_duplicate (filde->file);	
+					// new_file = file_duplicate (filde->file);	
+					// 뜯어보면,
+					// file_duplicate -> file_open -> calloc
+
 					// new_file->ref_count=0;
-					int new_index = list_size(fd_list);
-				
-					map->entries[new_index].parent = filde->file;
-					map->entries[new_index].child = new_file;
-			
+					// int new_index = list_size(fd_list);
+					// add the new file object to the map
+					// list_push_back(&allocated_file_list, &new_file->elem);
 
-				}
-				else { // new_file allocation 실패
-					free (new_filde);
-					free_flag = true;
-					goto out;
-				}
-			}
+				
+				// map->entries[index].parent = filde->file; 
+				// map->entries[index].child = new_file;
+				// index++;
+		
+				
+				
+			
 			// new_file->ref_count++; // open할 때마다 증가시켜준다.
 			new_filde->file = new_file; 
 		}
@@ -338,9 +346,7 @@ __do_fork (void *aux_) { // parent 정보 받아야함. interupt frame
 
 	succ = true; // successfully duplicated the resources.
 out:
-	if (free_flag) {
-		free (map);
-	}
+
 	aux->succ = succ;
 	/* Give control back to the parent */
 	if (succ){
@@ -463,7 +469,9 @@ process_exit (void) {
 			if (filde_elem->type == FILE){
 				if (true) {
 					// filde_elem->file->ref_count = 0;
-					file_close (filde_elem->file);
+					file_close (filde_elem->file); 
+					// free (filde_elem);
+
 				}
 				else{
 					// filde_elem->file->ref_count--;
@@ -477,9 +485,9 @@ process_exit (void) {
 	while (!list_empty (&thread_current ()->child_list)) {
 		e = list_pop_front (&thread_current ()->child_list);
 		struct thread *t = list_entry (e, struct thread, child_elem);
-		t->wait_on_exit = false;
-		// sema_up (&t->wait_sema);  // no..
-		sema_up (&t->exit_sema);
+		t->wait_on_exit = false; // 바로 exit하도록 한다.
+		// sema_down (&t->wait_sema);  // 
+		sema_up (&t->exit_sema); 
 	}
 
 	process_cleanup ();

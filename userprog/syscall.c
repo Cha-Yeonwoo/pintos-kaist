@@ -228,14 +228,17 @@ int open (struct intr_frame *f) {
 	fd = allocate_fd ();
 	// msg("DEBUG : fd = %d", fd);
 	if (fd >= 0) {
-		file = filesys_open(file_name);
+		file = filesys_open(file_name); // 파일을 열 때 calloc이 안에서 실행됨
 		if (file) {
 			filde = (struct file_des *) malloc (sizeof (struct file_des));
 			if (filde) {
-				struct file *obj = (struct file *) malloc (sizeof (struct file *));
+				// struct file *obj = (struct file *) malloc (sizeof (struct file *));
+				// allocated_file_list[allocate_file_counter++] = obj;
+				// memcpy(obj, file, sizeof (struct file));
 				// TODO: copy the file in to obj safely??
-				memcpy(obj, file, sizeof (struct file));
-				if (true) { // obj
+				// list_push_back(&allocated_file_list, &obj->elem);
+					
+				// if (true) { // obj
 					ret = fd;
 					// *obj = (struct file) {
 					// 	// .ref_count = 1,
@@ -246,14 +249,14 @@ int open (struct intr_frame *f) {
 					// };
 					*filde = (struct file_des) {
 						.fd = ret,
-						.file = obj, // copied
+						.file = file, //obj, // copied
 						.type = FILE,
 					};
 					list_insert_ordered (&t->fd_list, &filde->elem, fd_sort, NULL);
-				} else
-					free (filde);
+				// } else
+					// free (filde);
 			} else
-				file_close (file);
+				file_close (file); // 보통은 file_close에서 free가 된다.
 		}
 	}
 	lock_release (&filesys_lock);
@@ -411,20 +414,6 @@ int tell (struct intr_frame *f) {
 
 
 
-// bool
-// clean_filde (struct file_des *filde) {
-// 	if (filde) {
-// 		if (filde->type == FILE){
-// 			if (filde->file->ref_count == 1) {
-// 				filde->file->ref_count = 0;
-// 				file_close (filde->file);
-// 			}
-// 		}
-// 		free (filde);
-// 		return true;
-// 	}
-// 	return false;
-// }
 int close (struct intr_frame *f) {
 	struct thread *cur = thread_current();
     struct list_elem *e;
@@ -445,64 +434,63 @@ int close (struct intr_frame *f) {
 	// ret = 0;
 	// return ret;
 
+	struct file_des *fd_elem = find_filde_by_fd(fd);
 
-	lock_acquire (&filesys_lock);
-	struct file_des *filde = find_filde_by_fd (fd);
-	if (filde) {
-		list_remove (&filde->elem);
+	if (fd_elem) {
+		lock_acquire(&filesys_lock);
+		struct file *curr_file = fd_elem->file;
+		file_close(curr_file); // close하면 free됨
+		lock_release(&filesys_lock);
 
-		if (filde->type == FILE){
-			if (true) {
-				// filde->file->ref_count = 0;
-				file_close (filde->file);
-			}
-		}
-		free (filde);
+		struct list_elem curr_elem = fd_elem->elem;
+		list_remove(&curr_elem); // remove the file descriptor from the list
 
+		free(fd_elem); // free the file descriptor
+		ret = 0;
 	}
-
-	lock_release (&filesys_lock);
-	return ret;	
-
-}
-
-int dup2(int oldfd, int newfd){ 
-	// copy the file descriptor
-	struct thread *cur = thread_current();
-	struct file_des *old_filde;
-	struct file_des *new_filde;
-	int ret = -1;
-
-	if (oldfd == newfd) // same file descriptor. no need to copy
-		return newfd;
-
-	lock_acquire (&filesys_lock);
-	old_filde = find_filde_by_fd (oldfd);
-	if (old_filde) {
-		new_filde = find_filde_by_fd (newfd);
-		if (new_filde) {
-			// should copy the file descriptor
-			new_filde->file = old_filde->file;
-			ret = newfd; // return the new file descriptor
-			// TODO: should clean the old file descriptor
-			if (old_filde->type == FILE){
-
-				file_close (old_filde->file);
-				list_remove (&filde->elem);		
-			}
-		}
-		// nee_filde 못찾았을 때
-		new_filde = (struct file_des *) malloc (sizeof (struct file_des));
-		if (new_filde) {
-			*new_filde = *filde; // copy the file descriptor
-			new_filde->fd = newfd;
-			list_insert_ordered (&cur->fd_list, &new_filde->elem, fd_sort, NULL);
-			ret = newfd;
-		}
-	}
-	lock_release (&filesys_lock);
 	return ret;
+
+
 }
+
+// int dup2(int oldfd, int newfd){ 
+// 	// copy the file descriptor
+// 	struct thread *cur = thread_current();
+// 	struct file_des *old_filde;
+// 	struct file_des *new_filde;
+// 	int ret = -1;
+
+// 	if (oldfd == newfd) // same file descriptor. no need to copy
+// 		return newfd;
+
+// 	lock_acquire (&filesys_lock);
+// 	old_filde = find_filde_by_fd (oldfd);
+// 	if (old_filde) {
+// 		new_filde = find_filde_by_fd (newfd);
+// 		if (new_filde) {
+// 			// should copy the file descriptor
+// 			new_filde->file = old_filde->file;
+// 			ret = newfd; // return the new file descriptor
+// 			// TODO: should clean the old file descriptor
+// 			if (old_filde->type == FILE){
+
+// 				file_close (old_filde->file);
+// 				// list_remove (&filde->elem);		
+// 				free (old_filde);
+// 			}
+// 		}
+// 		// nee_filde 못찾았을 때
+// 		new_filde = (struct file_des *) malloc (sizeof (struct file_des));
+// 		if (new_filde) {
+// 			*new_filde = *old_filde; // copy the file descriptor
+// 			new_filde->fd = newfd;
+// 			list_insert_ordered (&cur->fd_list, &new_filde->elem, fd_sort, NULL);
+// 			ret = newfd;
+// 		}
+// 	}
+// 	lock_release (&filesys_lock);
+// 	return ret;
+// }
 
 
 /* The main system call interface */
@@ -557,9 +545,9 @@ syscall_handler (struct intr_frame *f) {
 		case SYS_CLOSE:
 			f->R.rax = close (f);
 			break;
-		case SYS_DUP2:
-			f->R.rax = dup2 (f->R.rdi, f->R.rsi);
-			break;
+		// case SYS_DUP2:
+		// 	f->R.rax = dup2 (f->R.rdi, f->R.rsi);
+		// 	break;
 		default:
 			printf ("Unexpected Syscall: %llx", f->R.rax);
 			f->R.rax = -1;

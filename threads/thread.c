@@ -50,6 +50,8 @@ static struct lock tid_lock;
 /* Thread destruction requests */
 static struct list destruction_req;
 
+
+
 /* Statistics. */
 static long long idle_ticks;    /* # of timer ticks spent idle. */
 static long long kernel_ticks;  /* # of timer ticks in kernel threads. */
@@ -121,8 +123,15 @@ thread_init (void) {
 	list_init (&ready_list);
 	list_init (&destruction_req);
 
+
+
 	// unique.k 08291154
 	list_init (&sleep_list);
+
+
+	/* User Prog */
+	// list_init (&allocated_file_list);
+	allocate_file_counter = 0;
 
 	/* Set up a thread structure for the running thread. */
 	initial_thread = running_thread ();

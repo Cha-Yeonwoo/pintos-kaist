@@ -139,6 +139,11 @@ struct thread {
    Controlled by kernel command-line option "-o mlfqs". */
 extern bool thread_mlfqs; // advanced-scheduler
 
+
+/* User Prog */
+int allocated_file_list[100]; // global list that contains all the allocated files
+int allocate_file_counter; // counter for the allocated files
+
 void thread_init (void);
 void thread_start (void);
 
