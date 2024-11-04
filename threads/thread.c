@@ -128,11 +128,6 @@ thread_init (void) {
 	// unique.k 08291154
 	list_init (&sleep_list);
 
-
-	/* User Prog */
-	// list_init (&allocated_file_list);
-	allocate_file_counter = 0;
-
 	/* Set up a thread structure for the running thread. */
 	initial_thread = running_thread ();
 	init_thread (initial_thread, "main", PRI_DEFAULT);

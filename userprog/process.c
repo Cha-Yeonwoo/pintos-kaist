@@ -51,7 +51,6 @@ process_init (struct thread *parent, struct semaphore *sema) {
 struct initd_aux {
 	struct thread *parent;
 	char *file_name;
-	struct semaphore dial;
 };
 
 /* Starts the first userland program, called "initd", loaded from FILE_NAME.
@@ -62,7 +61,6 @@ struct initd_aux {
 tid_t
 process_create_initd (const char *file_name) {
 	char *fn_copy;
-	char *unused;
 	tid_t tid;
 	const char *delimeter = " ";
 
@@ -78,55 +76,49 @@ process_create_initd (const char *file_name) {
 		fn_copy[strlen(file_name) + 1] = 0;
 	}
 	// strtok_r을 사용하여 fn_copy를 delimeter로 나눈다.
-	fn_copy = strtok_r(fn_copy, delimeter, &unused);
+	fn_copy = strtok_r(fn_copy, delimeter, &fn_copy);
 
 	/* Create a new thread to execute FILE_NAME. */
 	// tid = thread_create (file_name, PRI_DEFAULT, initd, fn_copy);
 	struct initd_aux *aux =
-		(struct initd_aux *) malloc (sizeof (struct initd_aux));
+		(struct initd_aux *) malloc (sizeof (struct initd_aux)); // file_name과 thread를 저장할 aux를 생성
 
-	aux->file_name = fn_copy;
-	// struct thread *parent = (struct thread *) malloc (sizeof (struct thread));
-	// parent = thread_current ();
+	aux->file_name = fn_copy; // copy the file name to the aux
 
 	aux->parent = thread_current ();
-	sema_init (&aux->dial, 0);
-	// sema_init(&parent->sema_for_fork, 0);
+	sema_init (&aux->parent->sema_for_init, 0); 
 
-	tid = thread_create (fn_copy, PRI_DEFAULT, initd, aux);
+	tid = thread_create (fn_copy, PRI_DEFAULT, initd, aux); // create a new thread to execute FILE_NAME
+
 	if (tid == TID_ERROR)
 		palloc_free_page (fn_copy);
 	else
-		sema_down(&aux->dial);
-		// sema_down(&parent->sema_for_fork);
-	// free (parent);
+		sema_down(&aux->parent->sema_for_init); 
+	
 	free (aux);
 	return tid;
 }
 
 /* A thread function that launches first user process. */
 static void
-initd (void *aux_) {
-	struct initd_aux *aux = (struct initd_aux *) aux_;
+initd (void *aux) {
+	struct initd_aux *aux_copy = (struct initd_aux *) aux;
 	// struct thread *parent = (struct thread *) aux_;
-	char *f_name = aux->file_name;
+	char *f_name = aux_copy ->file_name;
 	struct thread *current = thread_current ();
 
 	struct file_des *filde = (struct file_des *) malloc (sizeof (struct file_des));
 
-	*filde = (struct file_des) {
-		.type = STDIN,
-		.fd = 0, // in일 경우 0
-		.is_copied = false,
-	};
+	// STDIN file descriptor를 생성한다. (0)
+	filde->fd = 0; // in일 경우 0
+	filde->is_file = false;
 	list_push_back (&current->fd_list, &filde->elem);
 
 	filde = (struct file_des *) malloc (sizeof (struct file_des));
-	*filde = (struct file_des) {
-		.type = STDOUT,
-		.fd = 1, // out일 경우 1
-		.is_copied = false,
-	};
+
+	// STDOUT file descriptor를 생성한다. (1)
+	filde->fd = 1; // out일 경우 1
+	filde->is_file = false;
 
 	list_push_back (&current->fd_list, &filde->elem); // push back the file descriptor to the fd_list
 
@@ -134,8 +126,7 @@ initd (void *aux_) {
 	supplemental_page_table_init (&thread_current ()->spt);
 #endif
 
-	// process_init (aux, &->sema_for_fork);
-	process_init (aux->parent, &aux->dial);
+	process_init (aux_copy->parent, &aux_copy->parent->sema_for_init);
 
 	if (process_exec (f_name) < 0)
 		PANIC("Fail to launch initd\n");
@@ -145,7 +136,7 @@ initd (void *aux_) {
 struct fork_aux {
 	struct thread *parent;
 	struct intr_frame if_;
-	struct semaphore dial;
+	// struct semaphore dial;
 	bool succ;
 };
 
@@ -161,11 +152,13 @@ process_fork (const char *name, struct intr_frame *if_ ) {
 	aux->parent = thread_current ();
 	memcpy (&aux->if_, if_, sizeof (struct intr_frame));
 
-	sema_init (&aux->dial, 0);
+	// sema_init (&aux->dial, 0);
+	sema_init (&aux->parent->sema_for_fork, 0);
 	tid_t tid = thread_create (name, thread_current()->priority, __do_fork, aux);
 
 	if (tid != TID_ERROR)
-		sema_down (&aux->dial);
+		sema_down(&aux->parent->sema_for_fork);
+		// sema_down (&aux->dial);
 	if (!aux->succ) tid = TID_ERROR;
 	free (aux);
 
@@ -293,7 +286,7 @@ __do_fork (void *aux_) { // parent 정보 받아야함. interupt frame
 
 		*new_filde = *filde;
 
-		if (filde->type == FILE) {
+		if (filde->fd >= 2 && filde->file) { // file descriptor가 file일 때
 			// new_file = fd_map_lookup (map, filde->file); // check the file object is already duplicated
 		
 			// // 논리가 틀린건 아닌데 비효율적
@@ -320,13 +313,6 @@ __do_fork (void *aux_) { // parent 정보 받아야함. interupt frame
 					// int new_index = list_size(fd_list);
 					// add the new file object to the map
 					// list_push_back(&allocated_file_list, &new_file->elem);
-
-				
-				// map->entries[index].parent = filde->file; 
-				// map->entries[index].child = new_file;
-				// index++;
-		
-				
 				
 			
 			// new_file->ref_count++; // open할 때마다 증가시켜준다.
@@ -351,11 +337,13 @@ out:
 	/* Give control back to the parent */
 	if (succ){
 		// parent?
-		process_init (parent, &aux->dial);
+		// process_init (parent, &aux->dial);
+		process_init (parent, &parent->sema_for_fork);
 	}
 	else{
 		thread_current()->wait_on_exit = succ; // parent가 child가 끝날 때까지 기다리도록 한다.
-		sema_up (&aux->dial);
+		// sema_up (&aux->dial);
+		sema_up (&parent->sema_for_fork);
 	}
 
 	/* Finally, switch to the newly created process. */
@@ -466,7 +454,7 @@ process_exit (void) {
 		
 		struct file_des *filde_elem = list_entry (e, struct file_des, elem);
 		if (filde_elem) {
-			if (filde_elem->type == FILE){
+			if (filde_elem->fd >= 2) {
 				if (true) {
 					// filde_elem->file->ref_count = 0;
 					file_close (filde_elem->file); 
@@ -720,7 +708,8 @@ load (char *file_name, struct intr_frame *if_) {
 				continue;
 		}
 
-		if_->rsp -= sizeof(uint8_t); 
+		if_->rsp -= sizeof(uint8_t);  // rsp를 1byte씩 줄여가며, ptr이 가리키는 값을 rsp에 넣는다.
+
 		*(uint8_t *)if_->rsp = (uint8_t) *ptr;
 	}
 

@@ -119,6 +119,7 @@ struct thread {
 	
 	struct lock lock_for_child;
 	struct semaphore sema_for_fork;
+	struct semaphore sema_for_init;
 
 	struct list fd_list;
 	bool wait_on_exit;
@@ -141,9 +142,6 @@ extern bool thread_mlfqs; // advanced-scheduler
 
 
 /* User Prog */
-int allocated_file_list[100]; // global list that contains all the allocated files
-int allocate_file_counter; // counter for the allocated files
-
 void thread_init (void);
 void thread_start (void);
 

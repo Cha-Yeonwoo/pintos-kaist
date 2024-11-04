@@ -153,8 +153,9 @@ int exec (struct intr_frame *f) {
 		return -1;
 	}
 
-	strlcpy (fn_copy, file_name, PGSIZE);
-	if (strlen(file_name) < PGSIZE) {
+	strlcpy (fn_copy, file_name, PGSIZE); 
+
+	if (strlen(file_name) < PGSIZE) { 
 		// null terminate the string
 		fn_copy[strlen(file_name) + 1] = 0;
 	}
@@ -232,38 +233,33 @@ int open (struct intr_frame *f) {
 		if (file) {
 			filde = (struct file_des *) malloc (sizeof (struct file_des));
 			if (filde) {
-				// struct file *obj = (struct file *) malloc (sizeof (struct file *));
-				// allocated_file_list[allocate_file_counter++] = obj;
-				// memcpy(obj, file, sizeof (struct file));
+
 				// TODO: copy the file in to obj safely??
 				// list_push_back(&allocated_file_list, &obj->elem);
 					
 				// if (true) { // obj
-					ret = fd;
-					// *obj = (struct file) {
-					// 	// .ref_count = 1,
-					// 	.inode = file->inode,
-					// 	.pos = file->pos,
-					// 	.deny_write = file->deny_write
+				ret = fd;
+	
+				filde->fd = ret;
+				filde->file = file;
 
-					// };
-					*filde = (struct file_des) {
-						.fd = ret,
-						.file = file, //obj, // copied
-						.type = FILE,
-					};
-					list_insert_ordered (&t->fd_list, &filde->elem, fd_sort, NULL);
+					// 한도초과이면 list에 추가하면 안되나...?
+		
+				list_insert_ordered (&t->fd_list, &filde->elem, fd_sort, NULL);
+		
+					
+
+				// list_insert_ordered (&t->fd_list, &filde->elem, fd_sort, NULL);
 				// } else
 					// free (filde);
-			} else
+			} 
+			else
 				file_close (file); // 보통은 file_close에서 free가 된다.
 		}
 	}
 	lock_release (&filesys_lock);
 	return ret;
 }
-
-
 
 
 static uint64_t
@@ -274,8 +270,10 @@ file_size (struct intr_frame *f) {
 	int ret = -1;
 
 	lock_acquire (&filesys_lock);
-	filde = find_filde_by_fd (fd);
-	if (filde) ret = file_length (filde->file);
+
+	filde = find_filde_by_fd (fd); 
+	if (filde) ret = file_length (filde->file); // get the file length
+
 	lock_release (&filesys_lock);
 	return ret;
 }
@@ -312,17 +310,17 @@ int read (struct intr_frame *f) {
 	lock_acquire (&filesys_lock);
 	filde = find_filde_by_fd (fd);
 	if (filde) {
-		switch (filde->type) {
-			case STDIN:
-				for (; read_bytes < size; read_bytes++)
-					buf[read_bytes] = input_getc ();
-				break;
-			case STDOUT:
-				ret = -1;
-				break;
-			default:
-				ret = file_read (filde->file, buf, size);
-				break;
+		if (filde->fd == 0) {
+			for (; read_bytes < size; read_bytes++)
+				buf[read_bytes] = input_getc ();
+
+		}
+		else if (filde->fd == 1) {
+			ret = -1;
+
+		}
+		else{ // FILE
+			ret = file_read (filde->file, buf, size);
 		}
 	}
 	lock_release (&filesys_lock);
@@ -333,6 +331,7 @@ int read (struct intr_frame *f) {
 int write (struct intr_frame *f) {
 	int fd = f->R.rdi;
 	char *buf = (char *) f->R.rsi;
+
 	size_t size = f->R.rdx;
 	struct file_des *filde;
 	int ret = -1;
@@ -361,14 +360,14 @@ int write (struct intr_frame *f) {
 	lock_acquire (&filesys_lock);
 	filde = find_filde_by_fd (fd);
 	if (filde) {
-		if (filde->type == STDIN) {
+		if (filde->fd == 0) {
 			// cannot write to stdin
 			lock_release (&filesys_lock);
 			return -1;
 		}
-		else if (filde->type == STDOUT) {
-				putbuf (buf, size);  // write to console
-				ret = size;
+		else if (filde->fd == 1) {
+			putbuf (buf, size);  // write to console
+			ret = size;
 		}
 		else{
 			// TODO: writing should be possible when opened even if the file is deleted.
@@ -391,7 +390,7 @@ void seek (struct intr_frame *f) {
 
 	lock_acquire (&filesys_lock);
 	filde = find_filde_by_fd (fd);
-	if (filde && filde->type == FILE)
+	if (filde && filde->fd >= 2)
 		file_seek (filde->file, position);
 	lock_release (&filesys_lock);
 
@@ -406,7 +405,7 @@ int tell (struct intr_frame *f) {
 	lock_acquire (&filesys_lock);
 	filde = find_filde_by_fd (fd);
 
-	if (filde && filde->type == FILE)
+	if (filde && filde->fd >= 2)
 		ret = file_tell (filde->file);
 	lock_release (&filesys_lock);
 	return ret;
@@ -421,76 +420,84 @@ int close (struct intr_frame *f) {
 
 	int ret = -1;
 
-    // for (e = list_begin(&cur->fd_list); e != list_end(&cur->fd_list); e = list_next(e)) {
-    //     struct file_des *fd_struct = list_entry(e, struct file_des, elem);
-        
-    //     if (fd_struct->fd == fd) {
-    //         file_close(fd_struct->file);      // 파일 시스템에서 파일 닫기
-    //         list_remove(e);                   // fd_list에서 제거
-    //         free(fd_struct);                  // 파일 디스크립터 구조체 메모리 해제
-    //         return ret;
-    //     }
-    // }
-	// ret = 0;
-	// return ret;
 
-	struct file_des *fd_elem = find_filde_by_fd(fd);
+	struct file_des *filde = find_filde_by_fd(fd);
 
-	if (fd_elem) {
+	if (filde) {
 		lock_acquire(&filesys_lock);
-		struct file *curr_file = fd_elem->file;
+		struct file *curr_file = filde->file;
 		file_close(curr_file); // close하면 free됨
 		lock_release(&filesys_lock);
 
-		struct list_elem curr_elem = fd_elem->elem;
+		struct list_elem curr_elem = filde->elem;
 		list_remove(&curr_elem); // remove the file descriptor from the list
 
-		free(fd_elem); // free the file descriptor
-		ret = 0;
+		free(filde); // free the file descriptor
+		ret = 0; //success
 	}
 	return ret;
 
 
 }
 
-// int dup2(int oldfd, int newfd){ 
-// 	// copy the file descriptor
-// 	struct thread *cur = thread_current();
-// 	struct file_des *old_filde;
-// 	struct file_des *new_filde;
-// 	int ret = -1;
+int dup2(int oldfd, int newfd){ 
+	// copy the file descriptor
+	struct thread *cur = thread_current();
+	struct file_des *old_filde;
+	struct file_des *new_filde;
+	int ret = -1;
 
-// 	if (oldfd == newfd) // same file descriptor. no need to copy
-// 		return newfd;
+	if (oldfd == newfd) // same file descriptor. no need to copy
+		return newfd;
 
-// 	lock_acquire (&filesys_lock);
-// 	old_filde = find_filde_by_fd (oldfd);
-// 	if (old_filde) {
-// 		new_filde = find_filde_by_fd (newfd);
-// 		if (new_filde) {
-// 			// should copy the file descriptor
-// 			new_filde->file = old_filde->file;
-// 			ret = newfd; // return the new file descriptor
-// 			// TODO: should clean the old file descriptor
-// 			if (old_filde->type == FILE){
+	lock_acquire (&filesys_lock);
+	old_filde = find_filde_by_fd (oldfd);
 
-// 				file_close (old_filde->file);
-// 				// list_remove (&filde->elem);		
-// 				free (old_filde);
-// 			}
-// 		}
-// 		// nee_filde 못찾았을 때
-// 		new_filde = (struct file_des *) malloc (sizeof (struct file_des));
-// 		if (new_filde) {
-// 			*new_filde = *old_filde; // copy the file descriptor
-// 			new_filde->fd = newfd;
-// 			list_insert_ordered (&cur->fd_list, &new_filde->elem, fd_sort, NULL);
-// 			ret = newfd;
-// 		}
-// 	}
-// 	lock_release (&filesys_lock);
-// 	return ret;
-// }
+	if (old_filde) {
+		new_filde = find_filde_by_fd (newfd);
+		if (new_filde) {
+			// should copy the file descriptor
+			new_filde->file = old_filde->file;
+			ret = newfd; // return the new file descriptor
+
+			// TODO: should clean the old file descriptor
+			if (old_filde->fd >= 2) {
+
+				file_close (old_filde->file); // close (and free) the file
+				free (old_filde);
+			}
+			lock_release (&filesys_lock);
+			return ret;
+		}
+		// new_filde 못찾았을 때
+		new_filde = (struct file_des *) malloc (sizeof (struct file_des));
+		if (new_filde) {
+			*new_filde = *old_filde; // copy the file descriptor
+			new_filde->fd = newfd;
+			if (old_filde->fd >=2){// file descriptor가 file일 때
+				new_filde-> file = file_duplicate (old_filde->file); // duplicate the file
+				if (!new_filde->file) { // fail to duplicate the file
+					free (new_filde);
+					lock_release (&filesys_lock);
+					return -1;
+				}
+			}	
+			if (list_size (&cur->fd_list) < 128){  // file descriptor의 한도는 128?
+				list_insert_ordered (&cur->fd_list, &new_filde->elem, fd_sort, NULL);
+				ret = newfd;
+			}
+			else{
+				free (new_filde);
+			}
+		}
+		else{
+			// new_filde가 없을 때
+
+		}
+	}
+	lock_release (&filesys_lock);
+	return ret;
+}
 
 
 /* The main system call interface */
@@ -545,9 +552,9 @@ syscall_handler (struct intr_frame *f) {
 		case SYS_CLOSE:
 			f->R.rax = close (f);
 			break;
-		// case SYS_DUP2:
-		// 	f->R.rax = dup2 (f->R.rdi, f->R.rsi);
-		// 	break;
+		case SYS_DUP2:
+			f->R.rax = dup2 (f->R.rdi, f->R.rsi);
+			break;
 		default:
 			printf ("Unexpected Syscall: %llx", f->R.rax);
 			f->R.rax = -1;

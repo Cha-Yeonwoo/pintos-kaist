@@ -10,11 +10,10 @@ void syscall_init (void);
 
 
 struct file_des { // file descriptor
-	enum { STDIN, STDOUT, FILE } type; 
 	int fd;
 	struct list_elem elem; // 리스트에서의 위치
 	struct file *file;
-	bool is_copied;
+	bool is_file;
 };
 
 
