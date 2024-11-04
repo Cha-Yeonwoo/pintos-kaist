@@ -24,8 +24,6 @@
 #include "vm/vm.h"
 #endif
 
-
-
 static void process_cleanup (void);
 static bool load (char *file_name, struct intr_frame *if_);
 static void initd (void *f_name);
@@ -39,12 +37,12 @@ process_init (struct thread *parent, struct semaphore *sema) {
 	cur->wait_on_exit = true;
 
 	sema_init (&cur->wait_sema, 0);
-	sema_init (&cur->cleanup_ok, 0);
+	sema_init (&cur->exit_sema, 0);
 	
 	cur->exit_status = -1;
-	lock_acquire (&parent->child_lock);
+	lock_acquire (&parent->lock_for_child);
 	list_push_back (&parent->child_list, &cur->child_elem);
-	lock_release (&parent->child_lock);
+	lock_release (&parent->lock_for_child);
 	
 
 	sema_up (sema);
@@ -150,8 +148,10 @@ process_fork (const char *name, struct intr_frame *if_ ) {
 		return TID_ERROR;
 	aux->parent = thread_current ();
 	memcpy (&aux->if_, if_, sizeof (struct intr_frame));
+
 	sema_init (&aux->dial, 0);
 	tid_t tid = thread_create (name, thread_current()->priority, __do_fork, aux);
+
 	if (tid != TID_ERROR)
 		sema_down (&aux->dial);
 	if (!aux->succ)
@@ -188,6 +188,7 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
 	 *    TODO: according to the result). */
 	memcpy (newpage, parent_page, PGSIZE);
 	writable = is_writable (pte); // check the page is writable or not
+
 	/* 5. Add new page to child's page table at address VA with WRITABLE
 	 *    permission. */
 	if (!pml4_set_page (current->pml4, va, newpage, writable)) {
@@ -229,15 +230,6 @@ static bool fd_map_add (struct fd_map *fd_map, struct file *p, struct file *c) {
 	return true;
 }
 
-static struct file *
-fd_map_lookup (struct fd_map *fd_map, struct file *f) {
-	for (int index = 0; index < fd_map->i; index++) {
-		if (fd_map->entries[index].parent == f)
-			return fd_map->entries[index].child;
-	}
-	return NULL;
-}
-
 
 /* A thread function that copies parent's execution context.
  * Hint) parent->tf does not hold the userland context of the process.
@@ -255,6 +247,8 @@ __do_fork (void *aux_) {
 	struct intr_frame *parent_if = &aux->if_;
 	bool succ = false;
 
+	bool free_flag = false; // map을 free할지 말지 결정하는 flag
+
 	/* 1. Read the cpu context to local stack. */
 	memcpy (&if_, parent_if, sizeof (struct intr_frame));
 
@@ -263,7 +257,7 @@ __do_fork (void *aux_) {
 	current->pml4 = pml4_create();
 	if (current->pml4 == NULL)
 		// goto error;
-		goto out_no_free;
+		goto out;
 
 	process_activate (current);
 #ifdef VM
@@ -273,7 +267,7 @@ __do_fork (void *aux_) {
 #else
 	if (!pml4_for_each (parent->pml4, duplicate_pte, parent))
 		// goto error;
-		goto out_no_free;
+		goto out;
 #endif
 
 	/* ret = 0 */
@@ -290,41 +284,63 @@ __do_fork (void *aux_) {
 	struct file_des *filde;
 	struct list *fd_list = &parent->fd_list;
 
+
 	struct fd_map *map = new_map (fd_list);
 	if (!map)
-		goto out_no_free;
+		goto out;
 
 	for (e = list_begin (fd_list); e != list_end (fd_list); e = list_next (e)) {
 		filde = list_entry (e, struct file_des, elem);
 		struct file_des *new_filde = (struct file_des *) malloc (sizeof (struct file_des));
-		if (!new_filde)
+		if (!new_filde){
+			free_flag = true;
 			goto out;
+		}
 
 		*new_filde = *filde;
 
 		if (filde->type == FILE) {
-			new_file = fd_map_lookup (map, filde->file); // check the file object is already duplicated
-			if (new_file) {			
-			
-				new_file = file_duplicate (filde->file);	
-				if (map->size > map->i){
-					map->entries[map->i].parent = filde->file;
-					map->entries[map->i].child = new_file;
-					map->i++;
-				}
-
-			else {
-				free (new_filde);
-				goto out;
+			// new_file = fd_map_lookup (map, filde->file); // check the file object is already duplicated
+			bool found_file = false;
+			for (int _i = 0; _i < map->i; _i++) {
+				if (map->entries[_i].parent == filde->file){
+					new_file = map->entries[_i].child;
+					found_file = true;
+					break;
 				}
 			}
-			// new_file_obj->ref_cnt++;
+
+			if (!found_file){
+				new_file = (struct file_obj *) calloc (1, sizeof (struct file));
+				if (new_file) {			
+				
+					new_file = file_duplicate (filde->file);	
+					new_file->ref_count=0;
+			
+					if (map->i < map->size) {
+						map->entries[map->i].parent = filde->file;
+						map->entries[map->i].child = new_file;
+						map->i++;
+					}
+					else { // 한도 초과인데, 그냥 이렇게 하면 될까?
+						free (new_filde);
+						free_flag = true;
+						goto out;
+					}				
+
+				}
+				else { // new_file allocation 실패
+					free (new_filde);
+					free_flag = true;
+					goto out;
+				}
+			}
+			new_file->ref_count++;
 			new_filde->file = new_file; 
 		}
 		list_push_back (&current->fd_list, &new_filde->elem);
+			
 	}
-
-
 
 	/* TODO: Your code goes here.
 	 * TODO: Hint) To duplicate the file object, use `file_duplicate`
@@ -334,8 +350,9 @@ __do_fork (void *aux_) {
 
 	succ = true; // successfully duplicated the resources.
 out:
-	free (map);
-out_no_free:
+	if (free_flag) {
+		free (map);
+	}
 	aux->succ = succ;
 	/* Give control back to the parent */
 	thread_current()->wait_on_exit = succ;
@@ -384,20 +401,23 @@ process_exec (void *f_name) {
 	NOT_REACHED ();
 }
 
-static struct thread *
+struct thread *
 get_child_by_id (struct thread *parent, tid_t tid) {
 	struct list_elem *e;
-	struct thread *th;
-	lock_acquire (&parent->child_lock);
+	struct thread *t;
+
+	lock_acquire (&parent->lock_for_child);
+
 	for (e = list_begin (&parent->child_list); e != list_end (&parent->child_list);  e = list_next (e)) {
-		th = list_entry (e, struct thread, child_elem);
-		if (th->tid == tid)
-			goto out;
+		t = list_entry (e, struct thread, child_elem);
+		if (t->tid == tid){
+			lock_release (&parent->lock_for_child);
+			return t;
+		}
 	}
-	th = NULL;
-out:
-	lock_release (&parent->child_lock);
-	return th;
+	// no child with tid found
+	lock_release (&parent->lock_for_child);
+	return NULL;
 }
 
 
@@ -417,24 +437,15 @@ process_wait (tid_t child_tid UNUSED) {
 	 * XXX:       implementing the process_wait. */
 	// return -1;
 
-	int status = -1;
-	// struct thread *child = get_child_by_id (thread_current (), child_tid);
-	// if (child) {
-	// 	sema_down (&child->wait_sema);
-	// 	list_remove (&child->child_elem);
-	// 	status = child->exit_status;
-	// 	sema_up (&child->cleanup_ok);
-	// }
-	
-// +	int status = -1;
+	int ret = -1;
 	struct thread *child = get_child_by_id (thread_current (), child_tid);
 	if (child) {
 		sema_down (&child->wait_sema);
 		list_remove (&child->child_elem);
-		status = child->exit_status;
-		sema_up (&child->cleanup_ok);
+		ret = child->exit_status;
+		sema_up (&child->exit_sema);
 	}
-	return status;
+	return ret;
  
 }
 
@@ -447,17 +458,30 @@ process_exit (void) {
 	 * TODO: project2/process_termination.html).
 	 * TODO: We recommend you to implement process resource cleanup here. */
 	/* Free the file descriptors */
+
 	struct list_elem *e;
 	while (!list_empty (&thread_current ()->fd_list)) {
 		e = list_pop_front (&thread_current ()->fd_list);
-		free (list_entry (e, struct file_des, elem));
+		
+		struct file_des *filde_elem = list_entry (e, struct file_des, elem);
+		if (filde_elem) {
+			if (filde_elem->type == FILE){
+				if (filde_elem->file->ref_count == 1) {
+					filde_elem->file->ref_count = 0;
+					file_close (filde_elem->file);
+				}
+			}
+			// if not file, just free the file descriptor
+			free (filde_elem);
+		}
 	}
 
 	while (!list_empty (&thread_current ()->child_list)) {
 		e = list_pop_front (&thread_current ()->child_list);
-		struct thread *th = list_entry (e, struct thread, child_elem);
-		th->wait_on_exit = false;
-		sema_up (&th->cleanup_ok);
+		struct thread *t = list_entry (e, struct thread, child_elem);
+		t->wait_on_exit = false;
+		// sema_up (&t->wait_sema); 
+		sema_up (&t->exit_sema);
 	}
 
 	process_cleanup ();
@@ -468,9 +492,9 @@ process_exit (void) {
 	if (curr->wait_on_exit) {
 		printf ("%s: exit(%d)\n", curr->name, curr->exit_status);
 		sema_up (&curr->wait_sema);
-		sema_down (&curr->cleanup_ok);
+		sema_down (&curr->exit_sema);
 	}
-	process_cleanup ();
+
 }
 
 /* Free the current process's resources. */
@@ -678,11 +702,10 @@ load (char *file_name, struct intr_frame *if_) {
 
 	*(file_name + strlen(file_name)) = ' '; // add space at the end
 	
-	// char *endptr = file_name;
 	char *arg_array;
-	char *ptr = file_name + strlen(file_name);
+	char *ptr = file_name + strlen(file_name); // ptr points to the end of the file_name
 
-	/* setup argv[][] */
+	/* setup argv */
 	for (; ptr != file_name; ptr--) {	// iterate from end, char by char
 		if (*ptr == ' ') {
 			if (*(ptr + 1) != 0)

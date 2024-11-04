@@ -8,6 +8,7 @@
         "main.h": "c",
         "lib.h": "c",
         "stddef.h": "c",
-        "syscall.h": "c"
+        "syscall.h": "c",
+        "file.h": "c"
     }
 }

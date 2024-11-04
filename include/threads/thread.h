@@ -112,11 +112,12 @@ struct thread {
 	uint64_t *pml4;                     /* Page map level 4 */
 	struct file *executable;
 	int exit_status;
-	struct semaphore wait_sema;
-	struct semaphore cleanup_ok;
+	struct semaphore wait_sema; 
+	struct semaphore exit_sema; 
 	struct list_elem child_elem;
 	struct list child_list;
-	struct lock child_lock;
+	
+	struct lock lock_for_child;
 
 	struct list fd_list;
 	bool wait_on_exit;
