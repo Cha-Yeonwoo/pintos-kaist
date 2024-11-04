@@ -41,6 +41,7 @@ process_init (struct thread *parent, struct semaphore *sema) {
 	
 	cur->exit_status = -1;
 	lock_acquire (&parent->lock_for_child);
+	// child list에 현재 thread를 추가한다.
 	list_push_back (&parent->child_list, &cur->child_elem);
 	lock_release (&parent->lock_for_child);
 
@@ -224,7 +225,7 @@ struct fd_map {
  *       That is, you are required to pass second argument of process_fork to
  *       this function. */
 static void
-__do_fork (void *aux_) {
+__do_fork (void *aux_) { // parent 정보 받아야함. interupt frame
 	struct intr_frame if_;
 	struct fork_aux *aux = (struct fork_aux *) aux_; // fork_aux!
 
@@ -271,7 +272,6 @@ __do_fork (void *aux_) {
 
 
 	struct fd_map *map = (struct fd_map *) malloc (sizeof (struct fd_map) + sizeof (struct entry) * list_size(fd_list));
-	map->i = 0;
 	if (!map)
 		goto out;
 
@@ -297,11 +297,12 @@ __do_fork (void *aux_) {
 			}
 
 			if (!found_file){
-				new_file = (struct file_obj *) calloc (1, sizeof (struct file));
+				// new_file = (struct file *) calloc (1, sizeof (struct file *));
+				new_file = (struct file *) malloc (sizeof (struct file));
 				if (new_file) {			
 				
 					new_file = file_duplicate (filde->file);	
-					new_file->ref_count=0;
+					// new_file->ref_count=0;
 					int new_index = list_size(fd_list);
 				
 					map->entries[new_index].parent = filde->file;
@@ -315,12 +316,14 @@ __do_fork (void *aux_) {
 					goto out;
 				}
 			}
-			new_file->ref_count++;
+			// new_file->ref_count++; // open할 때마다 증가시켜준다.
 			new_filde->file = new_file; 
 		}
 		list_push_back (&current->fd_list, &new_filde->elem);
 			
 	}
+
+
 
 	/* TODO: Your code goes here.
 	 * TODO: Hint) To duplicate the file object, use `file_duplicate`
@@ -417,7 +420,7 @@ get_child_by_id (struct thread *parent, tid_t tid) {
  * This function will be implemented in problem 2-2.  For now, it
  * does nothing. */
 int
-process_wait (tid_t child_tid UNUSED) {
+process_wait (tid_t child_tid) {
 	/* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
 	 * XXX:       to add infinite loop here before
 	 * XXX:       implementing the process_wait. */
@@ -453,9 +456,12 @@ process_exit (void) {
 		struct file_des *filde_elem = list_entry (e, struct file_des, elem);
 		if (filde_elem) {
 			if (filde_elem->type == FILE){
-				if (filde_elem->file->ref_count == 1) {
-					filde_elem->file->ref_count = 0;
+				if (true) {
+					// filde_elem->file->ref_count = 0;
 					file_close (filde_elem->file);
+				}
+				else{
+					// filde_elem->file->ref_count--;
 				}
 			}
 			// if not file, just free the file descriptor
@@ -467,7 +473,7 @@ process_exit (void) {
 		e = list_pop_front (&thread_current ()->child_list);
 		struct thread *t = list_entry (e, struct thread, child_elem);
 		t->wait_on_exit = false;
-		// sema_up (&t->wait_sema); 
+		// sema_up (&t->wait_sema);  // no..
 		sema_up (&t->exit_sema);
 	}
 

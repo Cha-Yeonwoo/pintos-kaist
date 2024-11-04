@@ -80,12 +80,13 @@ static bool is_bad_name (void *p) {
 		return true;
 
 	struct thread *cur = thread_current ();
-	void *ptr = pg_round_down (p);
+	void *ptr = pg_round_down (p); // 페이지 명시
 	for (; ; ptr += PGSIZE) {
 		uint64_t *pte = pml4e_walk (cur->pml4, (uint64_t) ptr, 0);
 		if (pte == NULL || is_kern_pte(pte))
 			return true;
 
+		// 마지막 Null인지 확인
 		for (; *(char *)p != 0; p++);
 		if (*(char *)p == 0)
 			return false;
@@ -167,11 +168,11 @@ int exec (struct intr_frame *f) {
 	return -1;
 }
 
-static int create(struct intr_frame *f) {
+bool create(struct intr_frame *f) {
 
 	char *file_name = (char *) f->R.rdi;
 	unsigned initial_size = f->R.rsi;
-	int ret = -1;
+	bool ret = false;
 
 	char *empty_name = "";
 
@@ -188,13 +189,14 @@ static int create(struct intr_frame *f) {
 	return ret;
 }
 
-static int halt (void) {
+static int halt (void) { 
 	power_off (); // shutdown the system
 	return -1;
 }
 
-int remove(const char *file) {
-	int ret = -1;
+bool remove(struct intr_frame *f) {
+	char *file = (char *) f->R.rdi;
+	bool ret = false;
 	if (file == NULL || !is_user_vaddr (file)|| is_bad_name (file)) {
 		thread_current ()->exit_status = -1;
 		thread_exit ();
@@ -202,9 +204,9 @@ int remove(const char *file) {
 	}
 
 	lock_acquire (&filesys_lock);
+
 	ret = filesys_remove (file);
 	lock_release (&filesys_lock);
-
 	return ret;
 }
 
@@ -230,19 +232,21 @@ int open (struct intr_frame *f) {
 		if (file) {
 			filde = (struct file_des *) malloc (sizeof (struct file_des));
 			if (filde) {
-				struct file *obj = (struct file *) malloc (sizeof (struct file));
-				if (obj) {
+				struct file *obj = (struct file *) malloc (sizeof (struct file *));
+				// TODO: copy the file in to obj safely??
+				memcpy(obj, file, sizeof (struct file));
+				if (true) { // obj
 					ret = fd;
-					*obj = (struct file) {
-						.ref_count = 1,
-						.inode = file->inode,
-						.pos = file->pos,
-						.deny_write = file->deny_write
+					// *obj = (struct file) {
+					// 	// .ref_count = 1,
+					// 	.inode = file->inode,
+					// 	.pos = file->pos,
+					// 	.deny_write = file->deny_write
 
-					};
+					// };
 					*filde = (struct file_des) {
 						.fd = ret,
-						.file = file,
+						.file = obj, // copied
 						.type = FILE,
 					};
 					list_insert_ordered (&t->fd_list, &filde->elem, fd_sort, NULL);
@@ -364,6 +368,9 @@ int write (struct intr_frame *f) {
 				ret = size;
 		}
 		else{
+			// TODO: writing should be possible when opened even if the file is deleted.
+
+
 			ret = file_write (filde->file, buf, size); // write to file
 		}
 	}
@@ -373,20 +380,19 @@ int write (struct intr_frame *f) {
 }
 
 
-int seek (struct intr_frame *f) {
+void seek (struct intr_frame *f) {
 	struct file_des *filde;
 	int32_t fd = f->R.rdi;
 	unsigned position = f->R.rsi; // position to seek
 
-	int ret = -1;
 
 	lock_acquire (&filesys_lock);
 	filde = find_filde_by_fd (fd);
 	if (filde && filde->type == FILE)
 		file_seek (filde->file, position);
 	lock_release (&filesys_lock);
-	ret = 0;
-	return ret;
+
+	return;
 }
 
 int tell (struct intr_frame *f) {
@@ -405,20 +411,20 @@ int tell (struct intr_frame *f) {
 
 
 
-bool
-clean_filde (struct file_des *filde) {
-	if (filde) {
-		if (filde->type == FILE){
-			if (filde->file->ref_count == 1) {
-				filde->file->ref_count = 0;
-				file_close (filde->file);
-			}
-		}
-		free (filde);
-		return true;
-	}
-	return false;
-}
+// bool
+// clean_filde (struct file_des *filde) {
+// 	if (filde) {
+// 		if (filde->type == FILE){
+// 			if (filde->file->ref_count == 1) {
+// 				filde->file->ref_count = 0;
+// 				file_close (filde->file);
+// 			}
+// 		}
+// 		free (filde);
+// 		return true;
+// 	}
+// 	return false;
+// }
 int close (struct intr_frame *f) {
 	struct thread *cur = thread_current();
     struct list_elem *e;
@@ -446,8 +452,8 @@ int close (struct intr_frame *f) {
 		list_remove (&filde->elem);
 
 		if (filde->type == FILE){
-			if (filde->file->ref_count == 1) {
-				filde->file->ref_count = 0;
+			if (true) {
+				// filde->file->ref_count = 0;
 				file_close (filde->file);
 			}
 		}
@@ -467,6 +473,7 @@ void
 syscall_handler (struct intr_frame *f) {
 	// msg("DEBUG: syscall_handler. syscall number: %d", f->R.rax);
 	// f-R.rax: system call number (syscall-nr.h)
+	// f 를 thread 안에 넣는다??
 	switch (f->R.rax) {
 		case SYS_HALT:
 			halt ();
@@ -505,7 +512,7 @@ syscall_handler (struct intr_frame *f) {
 			f->R.rax = write (f);
 			break;
 		case SYS_SEEK:
-			f->R.rax = seek (f);
+			seek (f);
 			break;
 		case SYS_TELL:
 			f->R.rax = tell (f);
