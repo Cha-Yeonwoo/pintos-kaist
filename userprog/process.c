@@ -113,9 +113,11 @@ initd (void *aux_) {
 	struct thread *current = thread_current ();
 
 	struct file_des *filde = (struct file_des *) malloc (sizeof (struct file_des));
+
 	*filde = (struct file_des) {
 		.type = STDIN,
 		.fd = 0, // in일 경우 0
+		.is_copied = false,
 	};
 	list_push_back (&current->fd_list, &filde->elem);
 
@@ -123,6 +125,7 @@ initd (void *aux_) {
 	*filde = (struct file_des) {
 		.type = STDOUT,
 		.fd = 1, // out일 경우 1
+		.is_copied = false,
 	};
 
 	list_push_back (&current->fd_list, &filde->elem); // push back the file descriptor to the fd_list
@@ -278,6 +281,7 @@ __do_fork (void *aux_) { // parent 정보 받아야함. interupt frame
 	for (e = list_begin (fd_list); e != list_end (fd_list); e = list_next (e)) {
 		filde = list_entry (e, struct file_des, elem);
 		struct file_des *new_filde = (struct file_des *) malloc (sizeof (struct file_des));
+		new_filde->is_copied = false; // copy되었는지 확인하는 flag
 		if (!new_filde){
 			free_flag = true;
 			goto out;
@@ -299,6 +303,7 @@ __do_fork (void *aux_) { // parent 정보 받아야함. interupt frame
 			if (!found_file){
 				// new_file = (struct file *) calloc (1, sizeof (struct file *));
 				new_file = (struct file *) malloc (sizeof (struct file));
+				new_filde->is_copied = true;
 				if (new_file) {			
 				
 					new_file = file_duplicate (filde->file);	

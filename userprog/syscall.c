@@ -57,7 +57,7 @@ syscall_init (void) {
 static bool
 fd_sort (const struct list_elem *a, const struct list_elem *b) {
 	const struct file_des *fda = list_entry (a, struct file_des, elem);
-	const struct file_des *fdb = list_entry (a, struct file_des, elem);
+	const struct file_des *fdb = list_entry (b, struct file_des, elem);
 
 	return fda->fd < fdb->fd;
 }
@@ -466,6 +466,43 @@ int close (struct intr_frame *f) {
 
 }
 
+int dup2(int oldfd, int newfd){ 
+	// copy the file descriptor
+	struct thread *cur = thread_current();
+	struct file_des *old_filde;
+	struct file_des *new_filde;
+	int ret = -1;
+
+	if (oldfd == newfd) // same file descriptor. no need to copy
+		return newfd;
+
+	lock_acquire (&filesys_lock);
+	old_filde = find_filde_by_fd (oldfd);
+	if (old_filde) {
+		new_filde = find_filde_by_fd (newfd);
+		if (new_filde) {
+			// should copy the file descriptor
+			new_filde->file = old_filde->file;
+			ret = newfd; // return the new file descriptor
+			// TODO: should clean the old file descriptor
+			if (old_filde->type == FILE){
+
+				file_close (old_filde->file);
+				list_remove (&filde->elem);		
+			}
+		}
+		// nee_filde 못찾았을 때
+		new_filde = (struct file_des *) malloc (sizeof (struct file_des));
+		if (new_filde) {
+			*new_filde = *filde; // copy the file descriptor
+			new_filde->fd = newfd;
+			list_insert_ordered (&cur->fd_list, &new_filde->elem, fd_sort, NULL);
+			ret = newfd;
+		}
+	}
+	lock_release (&filesys_lock);
+	return ret;
+}
 
 
 /* The main system call interface */
@@ -520,9 +557,9 @@ syscall_handler (struct intr_frame *f) {
 		case SYS_CLOSE:
 			f->R.rax = close (f);
 			break;
-		// case SYS_DUP2:
-		// 	f->R.rax = SyS_dup2 (f);
-		// 	break;
+		case SYS_DUP2:
+			f->R.rax = dup2 (f->R.rdi, f->R.rsi);
+			break;
 		default:
 			printf ("Unexpected Syscall: %llx", f->R.rax);
 			f->R.rax = -1;
