@@ -34,7 +34,7 @@ static void
 process_init (struct thread *parent, struct semaphore *sema) {
  	struct thread *cur = thread_current ();
 
-	cur->wait_on_exit = true;
+	cur->wait_on_exit = true; // true when the thread is waiting for the child to exit
 
 	sema_init (&cur->wait_sema, 0);
 	sema_init (&cur->exit_sema, 0);
@@ -43,7 +43,6 @@ process_init (struct thread *parent, struct semaphore *sema) {
 	lock_acquire (&parent->lock_for_child);
 	list_push_back (&parent->child_list, &cur->child_elem);
 	lock_release (&parent->lock_for_child);
-	
 
 	sema_up (sema);
 }
@@ -86,13 +85,20 @@ process_create_initd (const char *file_name) {
 		(struct initd_aux *) malloc (sizeof (struct initd_aux));
 
 	aux->file_name = fn_copy;
+	// struct thread *parent = (struct thread *) malloc (sizeof (struct thread));
+	// parent = thread_current ();
+
 	aux->parent = thread_current ();
 	sema_init (&aux->dial, 0);
+	// sema_init(&parent->sema_for_fork, 0);
+
 	tid = thread_create (fn_copy, PRI_DEFAULT, initd, aux);
 	if (tid == TID_ERROR)
 		palloc_free_page (fn_copy);
 	else
 		sema_down(&aux->dial);
+		// sema_down(&parent->sema_for_fork);
+	// free (parent);
 	free (aux);
 	return tid;
 }
@@ -101,6 +107,7 @@ process_create_initd (const char *file_name) {
 static void
 initd (void *aux_) {
 	struct initd_aux *aux = (struct initd_aux *) aux_;
+	// struct thread *parent = (struct thread *) aux_;
 	char *f_name = aux->file_name;
 	struct thread *current = thread_current ();
 
@@ -123,6 +130,7 @@ initd (void *aux_) {
 	supplemental_page_table_init (&thread_current ()->spt);
 #endif
 
+	// process_init (aux, &->sema_for_fork);
 	process_init (aux->parent, &aux->dial);
 
 	if (process_exec (f_name) < 0)
@@ -154,9 +162,11 @@ process_fork (const char *name, struct intr_frame *if_ ) {
 
 	if (tid != TID_ERROR)
 		sema_down (&aux->dial);
-	if (!aux->succ)
-		tid = TID_ERROR;
+	if (!aux->succ) tid = TID_ERROR;
 	free (aux);
+
+	// msg("DEBUG: process_fork tid = %d", tid); 
+	// wait이 이상하다?
 	return tid;
 }
 
@@ -165,6 +175,9 @@ process_fork (const char *name, struct intr_frame *if_ ) {
  * pml4_for_each. This is only for the project 2. */
 static bool
 duplicate_pte (uint64_t *pte, void *va, void *aux) {
+	// pte: page table entry
+	// va: virtual address
+	// aux: additional data
 	struct thread *current = thread_current ();
 	struct thread *parent = (struct thread *) aux;
 	void *parent_page;
@@ -172,8 +185,7 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
 	bool writable;
 
 	/* 1. TODO: If the parent_page is kernel page, then return immediately. */
-	if (is_kernel_vaddr (va))
-		return true;
+	if (is_kernel_vaddr (va)) return true;
 	/* 2. Resolve VA from the parent's page map level 4. */
 	parent_page = pml4_get_page (parent->pml4, va);
 
@@ -181,8 +193,7 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
 	 *    TODO: NEWPAGE. */
 	newpage = palloc_get_page (PAL_USER);
 
-	if (newpage == NULL)
-		return false;
+	if (newpage == NULL) return false;
 	/* 4. TODO: Duplicate parent's page to the new page and
 	 *    TODO: check whether parent's page is writable or not (set WRITABLE
 	 *    TODO: according to the result). */
@@ -211,7 +222,7 @@ struct fd_map {
 
 /* A structure that maps the parent's file descriptor to the child's file
  * descriptor. */
-static struct fd_map * new_map (struct list *l) {
+static struct fd_map * create_new_map (struct list *l) {
 	struct fd_map *fd_maps =
 		(struct fd_map *) malloc (sizeof (struct fd_map) + sizeof (struct entry) * list_size(l));
 	if (fd_maps) {
@@ -255,9 +266,7 @@ __do_fork (void *aux_) {
 	/* 2. Duplicate PT */
 	current->exit_status = 0;
 	current->pml4 = pml4_create();
-	if (current->pml4 == NULL)
-		// goto error;
-		goto out;
+	if (current->pml4 == NULL) goto out;
 
 	process_activate (current);
 #ifdef VM
@@ -266,7 +275,6 @@ __do_fork (void *aux_) {
 		goto error;
 #else
 	if (!pml4_for_each (parent->pml4, duplicate_pte, parent))
-		// goto error;
 		goto out;
 #endif
 
@@ -285,7 +293,7 @@ __do_fork (void *aux_) {
 	struct list *fd_list = &parent->fd_list;
 
 
-	struct fd_map *map = new_map (fd_list);
+	struct fd_map *map = create_new_map (fd_list);
 	if (!map)
 		goto out;
 
@@ -355,8 +363,14 @@ out:
 	}
 	aux->succ = succ;
 	/* Give control back to the parent */
-	thread_current()->wait_on_exit = succ;
-	sema_up (&aux->dial);
+	if (succ){
+		// parent?
+		process_init (parent, &aux->dial);
+	}
+	else{
+		thread_current()->wait_on_exit = succ; // parent가 child가 끝날 때까지 기다리도록 한다.
+		sema_up (&aux->dial);
+	}
 
 	/* Finally, switch to the newly created process. */
 	if (succ)
@@ -439,13 +453,14 @@ process_wait (tid_t child_tid UNUSED) {
 
 	int ret = -1;
 	struct thread *child = get_child_by_id (thread_current (), child_tid);
+
 	if (child) {
 		sema_down (&child->wait_sema);
 		list_remove (&child->child_elem);
 		ret = child->exit_status;
-		sema_up (&child->exit_sema);
+		sema_up (&child->exit_sema); 
 	}
-	return ret;
+	return ret; // child가 없거나, 이미 wait한 경우
  
 }
 

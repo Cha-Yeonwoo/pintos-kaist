@@ -118,6 +118,7 @@ struct thread {
 	struct list child_list;
 	
 	struct lock lock_for_child;
+	struct semaphore sema_for_fork;
 
 	struct list fd_list;
 	bool wait_on_exit;
