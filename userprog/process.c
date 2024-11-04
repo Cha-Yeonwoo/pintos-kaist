@@ -212,34 +212,11 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
 #endif
 
 struct fd_map {
-	int size;
-	int i;
 	struct entry {
 		struct file *parent;
 		struct file *child;
 	} entries[0];  // 크기가 정해지지 않은 배열
 };
-
-/* A structure that maps the parent's file descriptor to the child's file
- * descriptor. */
-static struct fd_map * create_new_map (struct list *l) {
-	struct fd_map *fd_maps =
-		(struct fd_map *) malloc (sizeof (struct fd_map) + sizeof (struct entry) * list_size(l));
-	if (fd_maps) {
-		fd_maps->i = 0;
-		fd_maps->size = list_size (l);
-	}
-	return fd_maps;
-}
-
-static bool fd_map_add (struct fd_map *fd_map, struct file *p, struct file *c) {
-	if (fd_map->i >= fd_map->size)
-		return false;
-	fd_map->entries[fd_map->i].parent = p;
-	fd_map->entries[fd_map->i].child = c;
-	fd_map->i++;
-	return true;
-}
 
 
 /* A thread function that copies parent's execution context.
@@ -293,7 +270,8 @@ __do_fork (void *aux_) {
 	struct list *fd_list = &parent->fd_list;
 
 
-	struct fd_map *map = create_new_map (fd_list);
+	struct fd_map *map = (struct fd_map *) malloc (sizeof (struct fd_map) + sizeof (struct entry) * list_size(fd_list));
+	map->i = 0;
 	if (!map)
 		goto out;
 
@@ -310,9 +288,9 @@ __do_fork (void *aux_) {
 		if (filde->type == FILE) {
 			// new_file = fd_map_lookup (map, filde->file); // check the file object is already duplicated
 			bool found_file = false;
-			for (int _i = 0; _i < map->i; _i++) {
-				if (map->entries[_i].parent == filde->file){
-					new_file = map->entries[_i].child;
+			for (int i = 0; i < list_size(fd_list); i++) {
+				if (map->entries[i].parent == filde->file){
+					new_file = map->entries[i].child;
 					found_file = true;
 					break;
 				}
@@ -324,17 +302,11 @@ __do_fork (void *aux_) {
 				
 					new_file = file_duplicate (filde->file);	
 					new_file->ref_count=0;
+					int new_index = list_size(fd_list);
+				
+					map->entries[new_index].parent = filde->file;
+					map->entries[new_index].child = new_file;
 			
-					if (map->i < map->size) {
-						map->entries[map->i].parent = filde->file;
-						map->entries[map->i].child = new_file;
-						map->i++;
-					}
-					else { // 한도 초과인데, 그냥 이렇게 하면 될까?
-						free (new_filde);
-						free_flag = true;
-						goto out;
-					}				
 
 				}
 				else { // new_file allocation 실패
