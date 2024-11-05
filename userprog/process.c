@@ -24,6 +24,8 @@
 #include "vm/vm.h"
 #endif
 
+#define BUFFER 150
+
 static void process_cleanup (void);
 static bool load (char *file_name, struct intr_frame *if_);
 static void initd (void *f_name);
@@ -48,7 +50,7 @@ process_init (struct thread *parent, struct semaphore *sema) {
 	sema_up (sema);
 }
 
-struct initd_aux {
+struct initd_aux { // initd에 parent와 filename을 모두 넘겨 주기 위해 구조체 사용
 	struct thread *parent;
 	char *file_name;
 };
@@ -713,67 +715,67 @@ load (char *file_name, struct intr_frame *if_) {
 
 
 	/* Argument Parsing */
+	// 현재 file_name은 첫 공백이 null byte가 된 상태
+	*(file_name + strlen(file_name)) = ' '; // 원래대로 되돌리기
 
-	*(file_name + strlen(file_name)) = ' '; // add space at the end
+	char *parse_name;
+	char filename_new2[BUFFER];
+	strlcpy(filename_new2, file_name, BUFFER-1);
+	char filename_new3[BUFFER];
+	strlcpy(filename_new3, file_name, BUFFER-1);
 	
-	char *arg_array;
-	char *ptr = file_name + strlen(file_name); // ptr points to the end of the file_name
-
-	/* setup argv */
-	for (; ptr != file_name; ptr--) {	// iterate from end, char by char
-		if (*ptr == ' ') {
-			if (*(ptr + 1) != 0)
-				*ptr = 0;
-			else
-				continue;
-		}
-
-		if_->rsp -= sizeof(uint8_t);  // rsp를 1byte씩 줄여가며, ptr이 가리키는 값을 rsp에 넣는다.
-
-		*(uint8_t *)if_->rsp = (uint8_t) *ptr;
-	}
-
-	if_->rsp -= sizeof(uint8_t); 
-	*(uint8_t *)if_->rsp = (uint8_t) *ptr;
-
-	arg_array = (char *) if_->rsp; 
-
-	/* align */
-	while (if_->rsp & 7)
-		if_->rsp--;
-
-	/* last argv ptr */
-	ptr = (char *) USER_STACK - 1;	// argv[argc-1]
-	int argc = 0;
-
-	if_->rsp -= sizeof(uint64_t); 
-	*(uint64_t *)if_->rsp = (uint64_t) 0;
-
-	/* setup argv[] */
-	while (ptr != arg_array) {
-		if (*(ptr - 1) == 0) {
-
-		if_->rsp -= sizeof(uint64_t); 
-		*(uint64_t *)if_->rsp = (uint64_t) ptr;
-			argc++;
-		}
-		ptr--;
-	}
-	
-	if_->rsp -= sizeof(uint64_t); 
-	*(uint64_t *)if_->rsp = (uint64_t) ptr;
-	argc++;
-	if_->R.rdi = argc;
-	if_->R.rsi = if_->rsp;
-	if_->rsp -= sizeof(uint64_t); 
-	*(uint64_t *)if_->rsp = (uint64_t) 0;
-
 	/* Start address. */
-	if_->rip = ehdr.e_entry;
+	if_->rip = ehdr.e_entry; 
+
+
 	success = true;
 
-	/* TODO: Your code goes here.
-	 * TODO: Implement argument passing (see project2/argument_passing.html). */
+	// 여기에 추가. rsp를 바꿔야 한다. argument passing으로!
+	// token이 몇 개 있지...? 길이는 얼마..?
+	int argc = 0;
+	int arglen = 0;
+	char *token;
+	for (token = strtok_r(filename_new2, " ", &parse_name);
+	token != NULL; 
+	token = strtok_r (NULL, " ", &parse_name)) { 
+		argc += 1;
+		arglen += (strlen(token) + 1);
+	} 
+
+	// rsp를 얼마나 내려야 하는가?
+	// arglen + (argc + 2) * sizeof(char *) + alpha(8의 배수를 만들기 위한 align)
+	while ((arglen % 8) != 0) { arglen += 1; }
+
+	// if_->rsp는 uintptr = uint64 type. 따라서 그냥 그대로 빼준다.
+	uintptr_t rsp_up = if_->rsp;
+	if_->rsp = if_->rsp - arglen - (argc + 2) * 8;
+	*((void **) if_->rsp) = NULL; // return address
+
+	uintptr_t rsp_down = (if_->rsp) + 8;
+	
+	for (token = strtok_r(filename_new3, " ", &parse_name);
+	token != NULL; 
+	token = strtok_r (NULL, " ", &parse_name)) {
+		//printf("token. ");
+		rsp_up -= (strlen(token) + 1); 
+		size_t s = strlcpy ((char *) rsp_up, token, strlen(token) + 1);
+		//printf("argument is : %s\n", (char *) rsp_up);
+		ASSERT (s == strlen(token));
+		*((char **) rsp_down) = (char *) rsp_up;
+		rsp_down += 8;
+	} 
+	//printf("Token complete. ");
+	memset(rsp_down, 0, sizeof(void *));
+	rsp_down += 8;
+	ASSERT (rsp_up >= rsp_down);
+	ASSERT (rsp_up - rsp_down < 8);
+	while (rsp_up > rsp_down) {
+		*((uint8_t *) rsp_down) = (uint8_t) 0;
+		rsp_down += 1;
+	}
+
+	if_->R.rsi = (if_->rsp) + 8;
+	if_->R.rdi = argc;
 
 done:
  	/* We arrive here whether the load is successful or not. */
