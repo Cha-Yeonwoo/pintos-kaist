@@ -83,13 +83,17 @@ static bool is_bad_name (void *p) {
 	void *ptr = pg_round_down (p); // 페이지 명시
 	for (; ; ptr += PGSIZE) {
 		uint64_t *pte = pml4e_walk (cur->pml4, (uint64_t) ptr, 0);
-		if (pte == NULL || is_kern_pte(pte))
+		if (pte == NULL || is_kern_pte(pte)) // page가 없거나 커널 페이지 테이블이면
 			return true;
 
 		// 마지막 Null인지 확인
-		for (; *(char *)p != 0; p++);
-		if (*(char *)p == 0)
-			return false;
+		if (strlen (p) < PGSIZE) {
+			if (strchr (p, '\0') != NULL)
+				return false;
+			else
+				return true;
+		}
+		
 	}
 }
 
