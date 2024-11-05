@@ -111,14 +111,14 @@ initd (void *aux) {
 
 	// STDIN file descriptor를 생성한다. (0)
 	filde->fd = 0; // in일 경우 0
-	filde->is_file = false;
+	filde->is_file = 0;
 	list_push_back (&current->fd_list, &filde->elem);
 
 	filde = (struct file_des *) malloc (sizeof (struct file_des));
 
 	// STDOUT file descriptor를 생성한다. (1)
 	filde->fd = 1; // out일 경우 1
-	filde->is_file = false;
+	filde->is_file = 1;
 
 	list_push_back (&current->fd_list, &filde->elem); // push back the file descriptor to the fd_list
 
@@ -216,7 +216,6 @@ struct fd_map {
 	int size;
 };
 
-
 /* A thread function that copies parent's execution context.
  * Hint) parent->tf does not hold the userland context of the process.
  *       That is, you are required to pass second argument of process_fork to
@@ -269,6 +268,11 @@ __do_fork (void *aux_) { // parent 정보 받아야함. interupt frame
 
 
 	
+	struct file** oldfiles = (struct file **) calloc(list_size(fd_list), sizeof(struct file *));
+	if (!oldfiles) { goto out; }
+	struct file** newfiles = (struct file **) calloc(list_size(fd_list), sizeof(struct file *));
+	if (!newfiles) { free(oldfiles); goto out; }
+	int lastIndex = 0;
 
 	for (e = list_begin (fd_list); e != list_end (fd_list); e = list_next (e)) {
 		filde = list_entry (e, struct file_des, elem);
@@ -286,41 +290,35 @@ __do_fork (void *aux_) { // parent 정보 받아야함. interupt frame
 
 		*new_filde = *filde;
 
-		if (filde->fd >= 2 && filde->file) { // file descriptor가 file일 때
-			// new_file = fd_map_lookup (map, filde->file); // check the file object is already duplicated
-		
-			// // 논리가 틀린건 아닌데 비효율적
-			// for (int i = 0; i < list_size(fd_list); i++) {
-			// 	if (map->entries[i].parent == filde->file){ // entry에 이미 있는 경우
-			// 		new_file = map->entries[i].child; // 
-			// 		found_file = true;
-			// 		break;
-			// 	}
-			// } 있든 없든 결론은 똑같은거 아닌가?
-
-	
-			new_file = file_duplicate (filde->file); // file_duplicate을 통해 file object를 복사한다.
-				// 뜯어보면,
-				// file_duplicate -> file_open -> calloc
-	
-				// new_file MUST BE FREED at the close time
+		if (filde->fd >= 2) { // file descriptor가 file일 때
+			if (new_filde->is_file == 2) {
+				// file이 list에 있는지 찾는다.
+				bool found_file = false; 
+				for (int i = 0; i < lastIndex; i++) {
+					if (oldfiles[i] == filde->file) {
+						new_file = newfiles[i];
+						found_file = true;
+						break;
+					}
+				}
+				ASSERT(!found_file);
+				if (!found_file) {
+					new_file = file_duplicate (filde->file); // file_duplicate을 통해 file object를 복사한다.
+					oldfiles[lastIndex] = filde->file;
+					newfiles[lastIndex] = new_file;
+					lastIndex += 1;
+				}
 				
-					// new_file = file_duplicate (filde->file);	
-					// 뜯어보면,
-					// file_duplicate -> file_open -> calloc
-
-					// new_file->ref_count=0;
-					// int new_index = list_size(fd_list);
-					// add the new file object to the map
-					// list_push_back(&allocated_file_list, &new_file->elem);
-				
-			
-			// new_file->ref_count++; // open할 때마다 증가시켜준다.
+			} else {
+				new_file = NULL;
+			}
 			new_filde->file = new_file; 
+			new_filde->is_file = filde->is_file;
 		}
-		list_push_back (&current->fd_list, &new_filde->elem);
-			
+		list_push_back (&current->fd_list, &new_filde->elem);	
 	}
+	free(oldfiles);
+	free(newfiles);
 
 
 

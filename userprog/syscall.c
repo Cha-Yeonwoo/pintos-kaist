@@ -242,6 +242,7 @@ int open (struct intr_frame *f) {
 	
 				filde->fd = ret;
 				filde->file = file;
+				filde->is_file = 2;
 
 					// 한도초과이면 list에 추가하면 안되나...?
 		
@@ -310,12 +311,12 @@ int read (struct intr_frame *f) {
 	lock_acquire (&filesys_lock);
 	filde = find_filde_by_fd (fd);
 	if (filde) {
-		if (filde->fd == 0) {
+		if (filde->is_file == 0) {
 			for (; read_bytes < size; read_bytes++)
 				buf[read_bytes] = input_getc ();
 
 		}
-		else if (filde->fd == 1) {
+		else if (filde->is_file == 1) {
 			ret = -1;
 
 		}
@@ -360,12 +361,12 @@ int write (struct intr_frame *f) {
 	lock_acquire (&filesys_lock);
 	filde = find_filde_by_fd (fd);
 	if (filde) {
-		if (filde->fd == 0) {
+		if (filde->is_file == 0) {
 			// cannot write to stdin
 			lock_release (&filesys_lock);
 			return -1;
 		}
-		else if (filde->fd == 1) {
+		else if (filde->is_file == 1) {
 			putbuf (buf, size);  // write to console
 			ret = size;
 		}
@@ -390,7 +391,7 @@ void seek (struct intr_frame *f) {
 
 	lock_acquire (&filesys_lock);
 	filde = find_filde_by_fd (fd);
-	if (filde && filde->fd >= 2)
+	if (filde && (filde->is_file == 2))
 		file_seek (filde->file, position);
 	lock_release (&filesys_lock);
 
@@ -405,7 +406,7 @@ int tell (struct intr_frame *f) {
 	lock_acquire (&filesys_lock);
 	filde = find_filde_by_fd (fd);
 
-	if (filde && filde->fd >= 2)
+	if (filde && (filde->is_file == 2))
 		ret = file_tell (filde->file);
 	lock_release (&filesys_lock);
 	return ret;
@@ -457,14 +458,12 @@ int dup2(int oldfd, int newfd){
 		new_filde = find_filde_by_fd (newfd);
 		if (new_filde) {
 			// should copy the file descriptor
-			new_filde->file = old_filde->file;
-			ret = newfd; // return the new file descriptor
-
 			// TODO: should clean the old file descriptor
-			if (old_filde->fd >= 2) {
-
-				file_close (old_filde->file); // close (and free) the file
-				free (old_filde);
+			if (new_filde->fd >= 2) {
+				file_close (new_filde->file); // close (and free) the file
+				new_filde->file = old_filde->file;
+				new_filde->is_file = old_filde->is_file;
+				ret = newfd; // return the new file descriptor
 			}
 			lock_release (&filesys_lock);
 			return ret;
@@ -472,16 +471,10 @@ int dup2(int oldfd, int newfd){
 		// new_filde 못찾았을 때
 		new_filde = (struct file_des *) malloc (sizeof (struct file_des));
 		if (new_filde) {
-			*new_filde = *old_filde; // copy the file descriptor
+			// *new_filde = *old_filde; // copy the file descriptor
 			new_filde->fd = newfd;
-			if (old_filde->fd >=2){// file descriptor가 file일 때
-				new_filde-> file = file_duplicate (old_filde->file); // duplicate the file
-				if (!new_filde->file) { // fail to duplicate the file
-					free (new_filde);
-					lock_release (&filesys_lock);
-					return -1;
-				}
-			}	
+			new_filde->is_file = old_filde->is_file;
+			new_filde->file = old_filde->file;
 			if (list_size (&cur->fd_list) < 128){  // file descriptor의 한도는 128?
 				list_insert_ordered (&cur->fd_list, &new_filde->elem, fd_sort, NULL);
 				ret = newfd;
