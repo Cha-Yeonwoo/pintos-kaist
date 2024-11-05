@@ -122,6 +122,7 @@ struct thread {
 	struct semaphore sema_for_init;
 
 	struct list fd_list;
+	struct list fd_distinct_list;
 	bool wait_on_exit;
 	
 #endif

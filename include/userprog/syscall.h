@@ -16,6 +16,11 @@ struct file_des { // file descriptor
 	int is_file;
 };
 
+struct dfile {
+	struct file *file;
+	struct list_elem elem;
+};
+
 
 
 

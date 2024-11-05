@@ -588,6 +588,7 @@ init_thread (struct thread *t, const char *name, int priority) {
 #ifdef USERPROG
 	list_init (&t->child_list);
 	list_init (&t->fd_list);
+	list_init (&t->fd_distinct_list);
 	lock_init (&t->lock_for_child);
 	sema_init (&t->wait_sema, 0);
 	sema_init (&t->exit_sema, 0); // 이거때문이엿다....? 은 아니네

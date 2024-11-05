@@ -232,30 +232,22 @@ int open (struct intr_frame *f) {
 		file = filesys_open(file_name); // 파일을 열 때 calloc이 안에서 실행됨
 		if (file) {
 			filde = (struct file_des *) malloc (sizeof (struct file_des));
-			if (filde) {
-
-				// TODO: copy the file in to obj safely??
-				// list_push_back(&allocated_file_list, &obj->elem);
-					
-				// if (true) { // obj
+			struct dfile *dfile = (struct dfile *) malloc (sizeof (struct dfile));
+			if ((filde != NULL) && (dfile != NULL)) {
 				ret = fd;
-	
 				filde->fd = ret;
 				filde->file = file;
 				filde->is_file = 2;
-
-					// 한도초과이면 list에 추가하면 안되나...?
-		
 				list_insert_ordered (&t->fd_list, &filde->elem, fd_sort, NULL);
-		
-					
-
-				// list_insert_ordered (&t->fd_list, &filde->elem, fd_sort, NULL);
-				// } else
-					// free (filde);
-			} 
-			else
+				dfile->file = file;
+				//printf("open file : %d", file);
+				list_push_back(&t->fd_distinct_list, &dfile->elem);
+			} else {
+				free(filde);
+				free(dfile);
 				file_close (file); // 보통은 file_close에서 free가 된다.
+			}
+				
 		}
 	}
 	lock_release (&filesys_lock);
@@ -414,21 +406,47 @@ int tell (struct intr_frame *f) {
 
 
 
-int close (struct intr_frame *f) {
+int close (int fd, bool lock) {
 	struct thread *cur = thread_current();
     struct list_elem *e;
-	int fd = f->R.rdi;
 
 	int ret = -1;
 
-
+	if (lock) { lock_acquire(&filesys_lock); }
 	struct file_des *filde = find_filde_by_fd(fd);
 
 	if (filde) {
-		lock_acquire(&filesys_lock);
+		//printf("we want to close %d\n", filde->file);
+		if (filde->is_file < 2) {
+			struct list_elem curr_elem = filde->elem;
+			list_remove(&curr_elem);
+			free(filde);
+			if (lock) lock_release(&filesys_lock);
+			return 0;
+		}
 		struct file *curr_file = filde->file;
-		file_close(curr_file); // close하면 free됨
-		lock_release(&filesys_lock);
+		int count = 0;
+		for (e = list_begin(&cur->fd_list); e != list_end(&cur->fd_list); e = list_next(e)) {
+			struct file_des *filde2 = list_entry(e, struct file_des, elem);
+			if (filde2->file == filde->file) { count += 1; }
+		}
+		ASSERT(count >= 1)
+		if (count == 1) {
+			bool found = false;
+			struct dfile *dfile2;
+			for (e = list_begin(&cur->fd_distinct_list); e != list_end(&cur->fd_distinct_list); e = list_next(e)) {
+				dfile2 = list_entry(e, struct dfile, elem);
+				if (dfile2->file == filde->file) { 
+					found = true; 
+					break;
+				}
+			}
+			//printf("file %d is deleted.\n", filde->file);
+			ASSERT(found);
+			list_remove(e);
+			free(dfile2);
+			file_close(curr_file); // close하면 free됨
+		}
 
 		struct list_elem curr_elem = filde->elem;
 		list_remove(&curr_elem); // remove the file descriptor from the list
@@ -436,12 +454,14 @@ int close (struct intr_frame *f) {
 		free(filde); // free the file descriptor
 		ret = 0; //success
 	}
+	if (lock) lock_release(&filesys_lock);
 	return ret;
 
 
 }
 
 int dup2(int oldfd, int newfd){ 
+	//printf("dup2 : %d, %d\n", oldfd, newfd);
 	// copy the file descriptor
 	struct thread *cur = thread_current();
 	struct file_des *old_filde;
@@ -459,6 +479,7 @@ int dup2(int oldfd, int newfd){
 		if (new_filde) {
 			// should copy the file descriptor
 			// TODO: should clean the old file descriptor
+			/*
 			if (new_filde->fd >= 2) {
 				file_close (new_filde->file); // close (and free) the file
 				new_filde->file = old_filde->file;
@@ -467,6 +488,9 @@ int dup2(int oldfd, int newfd){
 			}
 			lock_release (&filesys_lock);
 			return ret;
+			*/
+			//printf("dup2-close. new_filde is %d, newfd is %d.\n", new_filde, newfd);
+			close(newfd, false);
 		}
 		// new_filde 못찾았을 때
 		new_filde = (struct file_des *) malloc (sizeof (struct file_des));
@@ -543,7 +567,7 @@ syscall_handler (struct intr_frame *f) {
 			f->R.rax = tell (f);
 			break;
 		case SYS_CLOSE:
-			f->R.rax = close (f);
+			f->R.rax = close ((int) f->R.rdi, true);
 			break;
 		case SYS_DUP2:
 			f->R.rax = dup2 (f->R.rdi, f->R.rsi);

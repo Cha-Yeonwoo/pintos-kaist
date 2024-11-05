@@ -282,41 +282,43 @@ __do_fork (void *aux_) { // parent 정보 받아야함. interupt frame
 			free_flag = true;
 			goto out;
 		}
-		// new_filde->is_copied = false; // copy되었는지 확인하는 flag
-		if (!new_filde){
-			free_flag = true;
-			goto out;
-		}
 
 		*new_filde = *filde;
 
-		if (filde->fd >= 2) { // file descriptor가 file일 때
-			if (new_filde->is_file == 2) {
-				// file이 list에 있는지 찾는다.
-				bool found_file = false; 
-				for (int i = 0; i < lastIndex; i++) {
-					if (oldfiles[i] == filde->file) {
-						new_file = newfiles[i];
-						found_file = true;
-						break;
-					}
+		if (new_filde->is_file == 2) {
+			// file이 list에 있는지 찾는다.
+			bool found_file = false; 
+			for (int i = 0; i < lastIndex; i++) {
+				if (oldfiles[i] == filde->file) {
+					new_file = newfiles[i];
+					found_file = true;
+					break;
 				}
-				ASSERT(!found_file);
-				if (!found_file) {
-					new_file = file_duplicate (filde->file); // file_duplicate을 통해 file object를 복사한다.
-					oldfiles[lastIndex] = filde->file;
-					newfiles[lastIndex] = new_file;
-					lastIndex += 1;
-				}
-				
-			} else {
-				new_file = NULL;
 			}
-			new_filde->file = new_file; 
-			new_filde->is_file = filde->is_file;
+			//ASSERT(!found_file);
+			if (!found_file) {
+				new_file = file_duplicate (filde->file); // file_duplicate을 통해 file object를 복사한다.
+				oldfiles[lastIndex] = filde->file;
+				newfiles[lastIndex] = new_file;
+				lastIndex += 1;
+			}
+			
+		} else {
+			new_file = NULL;
 		}
+		new_filde->file = new_file; 
+		new_filde->is_file = filde->is_file;
 		list_push_back (&current->fd_list, &new_filde->elem);	
 	}
+	ASSERT(list_size(&parent->fd_distinct_list) == lastIndex);
+
+	for (int i = 0; i < lastIndex; i++) {
+		struct dfile *dfile2 = (struct dfile *) malloc(sizeof(struct dfile));
+		dfile2->file = newfiles[i];
+		//printf("duplicate file : %d to %d", oldfiles[i], newfiles[i]);
+		list_push_back(&current->fd_distinct_list, &dfile2->elem);
+	}
+
 	free(oldfiles);
 	free(newfiles);
 
@@ -445,25 +447,45 @@ process_exit (void) {
 	 * TODO: project2/process_termination.html).
 	 * TODO: We recommend you to implement process resource cleanup here. */
 	/* Free the file descriptors */
-
 	struct list_elem *e;
-	while (!list_empty (&thread_current ()->fd_list)) {
-		e = list_pop_front (&thread_current ()->fd_list);
+	
+	/*
+	for (e = list_begin(&curr->fd_list); e != list_end(&curr->fd_list); e = list_next(e)) {
+		struct file_des *filde_elem = list_entry (e, struct file_des, elem);
+		struct list_elem *e2;
+		if (filde_elem->file == NULL) { continue; }
+		for (e2 = list_next(e); e2 != list_end(&curr->fd_list); e2 = list_next(e2)) {
+			struct file_des *filde_elem2 = list_entry (e2, struct file_des, elem);
+			if (filde_elem2->file == filde_elem->file) {
+				filde_elem2->file = NULL;
+			}
+		}
+	}	
+	*/
+	while (!list_empty (&curr->fd_distinct_list)) {
+		e = list_begin (&curr->fd_distinct_list);
+		struct dfile *dfile2 = list_entry (e, struct dfile, elem);
+		file_close(dfile2->file);
+		list_remove(e);
+		free(dfile2);
+	}
+	while (!list_empty (&curr->fd_list)) {
+		e = list_pop_front (&curr->fd_list);
 		
 		struct file_des *filde_elem = list_entry (e, struct file_des, elem);
 		if (filde_elem) {
-			if (filde_elem->fd >= 2) {
-				if (true) {
-					// filde_elem->file->ref_count = 0;
-					file_close (filde_elem->file); 
-					// free (filde_elem);
+			// if (filde_elem->fd >= 2) {
+			// 	if (true) {
+			// 		// filde_elem->file->ref_count = 0;
+			// 		file_close (filde_elem->file); 
+			// 		// free (filde_elem);
 
-				}
-				else{
-					// filde_elem->file->ref_count--;
-				}
-			}
-			// if not file, just free the file descriptor
+			// 	}
+			// 	else{
+			// 		// filde_elem->file->ref_count--;
+			// 	}
+			// }
+			// // if not file, just free the file descriptor
 			free (filde_elem);
 		}
 	}
