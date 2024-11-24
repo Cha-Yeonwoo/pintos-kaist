@@ -339,6 +339,7 @@ thread_current (void) {
 	ASSERT (is_thread (t));
 	ASSERT (t->status == THREAD_RUNNING);
 
+
 	return t;
 }
 

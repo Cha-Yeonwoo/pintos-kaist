@@ -247,8 +247,11 @@ __do_fork (void *aux_) { // parent 정보 받아야함. interupt frame
 	process_activate (current);
 #ifdef VM
 	supplemental_page_table_init (&current->spt);
-	if (!supplemental_page_table_copy (&current->spt, &parent->spt))
+	if (!supplemental_page_table_copy (&current->spt, &parent->spt)){
+		msg("DEBUG: supplemental_page_table_copy failed");
 		goto error;
+	}
+		// goto out; // 일단.. 
 #else
 	if (!pml4_for_each (parent->pml4, duplicate_pte, parent))
 		goto out;
@@ -333,6 +336,9 @@ __do_fork (void *aux_) { // parent 정보 받아야함. interupt frame
 	 * TODO:       the resources of parent.*/
 
 	succ = true; // successfully duplicated the resources.
+
+
+
 out:
 
 	aux->succ = succ;
@@ -344,14 +350,15 @@ out:
 	}
 	else{
 		thread_current()->wait_on_exit = succ; // parent가 child가 끝날 때까지 기다리도록 한다.
-		// sema_up (&aux->dial);
 		sema_up (&parent->sema_for_fork);
 	}
 
 	/* Finally, switch to the newly created process. */
 	if (succ)
 		do_iret (&if_);
-// error:
+
+error:
+
  	thread_exit ();
 }
 
@@ -373,14 +380,19 @@ process_exec (void *f_name) {
 
 	/* We first kill the current context */
 	process_cleanup ();
+// #ifdef VM
+// 	// page table init 필요.. ?
+// 	supplemental_page_table_init(&thread_current()->spt);
+// #endif
 
 	/* And then load the binary */
-	success = load (file_name, &_if);
+	success = load (file_name, &_if); // fail on 0, success on 1
 
 	/* If load failed, quit. */
 	palloc_free_page (file_name);
 	// if (!success)
 	// 	return -1;
+	// msg("DEBUG: process_exec success = %d", success);
 	if (!success) {
 		thread_current ()->exit_status = -1;
 		thread_exit ();
@@ -710,8 +722,10 @@ load (char *file_name, struct intr_frame *if_) {
 	// msg("DEBUG: load segment success");
 
 	/* Set up stack. */
-	if (!setup_stack (if_))
+	if (!setup_stack (if_)){
+		// msg("DEBUG: setup stack failed");
 		goto done;
+	}
 
 
 	/* Argument Parsing */
@@ -946,7 +960,35 @@ lazy_load_segment (struct page *page, void *aux) {
 	/* TODO: Load the segment from the file */
 	/* TODO: This called when the first page fault occurs on address VA. */
 	/* TODO: VA is available when calling this function. */
+	// struct file *file = NULL;
+
+	struct spt_copy_aux *load_info = (struct spt_copy_aux *)aux;
+
+	struct file *file = load_info->page_file;
+	off_t offset = load_info->offset;
+	size_t page_read_bytes = load_info->read_bytes;
+	size_t page_zero_bytes = load_info->zero_bytes;
+	void *buffer = page->frame->kva;
+
+	//파일 위치를 찾기 위해 offset을 사용해서 file_seek를 사용한다.
+	file_seek(file, offset);
+	//offset에 담긴 파일을 물리 프레임으로부터 읽어야하기 때문에 page의 frame에 접근해서 kernel의 주소를 사용해서 읽는다
+	off_t read_result = file_read(file, buffer, page_read_bytes);
+
+	if (read_result!= page_read_bytes) {
+		palloc_free_page(buffer);
+		return false;
+	} else {
+		memset(buffer + page_read_bytes, 0, page_zero_bytes); // zero_bytes만큼 0으로 초기화
+		return true;
+	}
+
+	NOT_REACHED (); // 디버깅
+	return false;
+
 }
+
+
 
 /* Loads a segment starting at offset OFS in FILE at address
  * UPAGE.  In total, READ_BYTES + ZERO_BYTES bytes of virtual
@@ -977,15 +1019,24 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 		size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
 		/* TODO: Set up aux to pass information to the lazy_load_segment. */
-		void *aux = NULL;
+		// void *aux = NULL;
+		// lazy load segment을 위한 aux를 설정
+		struct spt_copy_aux *load_info = (struct spt_copy_aux *)malloc(sizeof (struct spt_copy_aux));
+		// copy members of load_info
+		load_info->page_file = file;
+		load_info->offset = ofs;
+		load_info->read_bytes = page_read_bytes;
+		load_info->zero_bytes = page_zero_bytes;
 		if (!vm_alloc_page_with_initializer (VM_ANON, upage,
-					writable, lazy_load_segment, aux))
+					writable, lazy_load_segment, load_info)) { // aux 대신 새로운 struct
 			return false;
+		}
 
 		/* Advance. */
 		read_bytes -= page_read_bytes;
 		zero_bytes -= page_zero_bytes;
 		upage += PGSIZE;
+		ofs += PGSIZE; // offset도 같이 이동해야한다.?
 	}
 	return true;
 }
@@ -1000,7 +1051,21 @@ setup_stack (struct intr_frame *if_) {
 	 * TODO: If success, set the rsp accordingly.
 	 * TODO: You should mark the page is stack. */
 	/* TODO: Your code goes here */
+	bool page_init = vm_alloc_page(VM_ANON | VM_MARKER_0, stack_bottom, true); // stack page 생성
+	if (page_init) {
+		if ( vm_claim_page(stack_bottom)) {
+	
+			if_->rsp = USER_STACK;
+			thread_current()->rsp = stack_bottom;
+			return true;
 
+		} else { // claim 실패
+			return success; // failed
+		}
+	}
+	// msg("DEBUG: setup_stack success = %d", success);
+	// msg("DEBUG: if_->rsp = %p", if_->rsp);
+	NOT_REACHED (); // 디버깅
 	return success;
 }
 #endif /* VM */

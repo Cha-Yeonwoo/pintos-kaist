@@ -129,6 +129,7 @@ struct thread {
 #ifdef VM
 	/* Table for whole virtual memory owned by thread. */
 	struct supplemental_page_table spt;
+	uint64_t rsp; // 스택에 저장할 포인터
 #endif
 
 	/* Owned by thread.c. */
