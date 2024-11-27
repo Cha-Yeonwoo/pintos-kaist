@@ -248,7 +248,7 @@ __do_fork (void *aux_) { // parent 정보 받아야함. interupt frame
 #ifdef VM
 	supplemental_page_table_init (&current->spt);
 	if (!supplemental_page_table_copy (&current->spt, &parent->spt)){
-		msg("DEBUG: supplemental_page_table_copy failed");
+		// msg("DEBUG: supplemental_page_table_copy failed");
 		goto error;
 	}
 		// goto out; // 일단.. 
@@ -345,7 +345,6 @@ out:
 	/* Give control back to the parent */
 	if (succ){
 		// parent?
-		// process_init (parent, &aux->dial);
 		process_init (parent, &parent->sema_for_fork);
 	}
 	else{
@@ -380,10 +379,10 @@ process_exec (void *f_name) {
 
 	/* We first kill the current context */
 	process_cleanup ();
-// #ifdef VM
-// 	// page table init 필요.. ?
-// 	supplemental_page_table_init(&thread_current()->spt);
-// #endif
+#ifdef VM
+	// page table init 필요.. ?
+	supplemental_page_table_init(&thread_current()->spt);
+#endif
 
 	/* And then load the binary */
 	success = load (file_name, &_if); // fail on 0, success on 1
@@ -448,6 +447,7 @@ process_wait (tid_t child_tid) {
 		ret = child->exit_status;
 		sema_up (&child->exit_sema); 
 	}
+
 	return ret; // child가 없거나, 이미 wait한 경우
  
 }
@@ -502,13 +502,13 @@ process_exit (void) {
 			// // if not file, just free the file descriptor
 			free (filde_elem);
 		}
-	}
+	} 
 
 	while (!list_empty (&thread_current ()->child_list)) {
 		e = list_pop_front (&thread_current ()->child_list);
 		struct thread *t = list_entry (e, struct thread, child_elem);
 		t->wait_on_exit = false; // 바로 exit하도록 한다.
-		// sema_down (&t->wait_sema);  // 
+		// sema_down (&t->wait_sema);  // 이거 ?
 		sema_up (&t->exit_sema); 
 	}
 
@@ -965,21 +965,28 @@ lazy_load_segment (struct page *page, void *aux) {
 	struct spt_copy_aux *load_info = (struct spt_copy_aux *)aux;
 
 	struct file *file = load_info->page_file;
-	off_t offset = load_info->offset;
-	size_t page_read_bytes = load_info->read_bytes;
+	off_t offset = load_info->offset; 
+	size_t read_bytes = load_info->read_bytes;
 	size_t page_zero_bytes = load_info->zero_bytes;
 	void *buffer = page->frame->kva;
 
-	//파일 위치를 찾기 위해 offset을 사용해서 file_seek를 사용한다.
-	file_seek(file, offset);
-	//offset에 담긴 파일을 물리 프레임으로부터 읽어야하기 때문에 page의 frame에 접근해서 kernel의 주소를 사용해서 읽는다
-	off_t read_result = file_read(file, buffer, page_read_bytes);
+	if (file == NULL) {
+		return false;
+	}
 
-	if (read_result!= page_read_bytes) {
-		palloc_free_page(buffer);
+	//파일 위치를 찾기 위해
+	file_seek(file, offset);
+	
+
+	//offset에 담긴 파일을 물리 프레임으로부터 읽어야하기 때문에 page의 frame에 접근해서 kernel의 주소를 사용해서 읽는다
+	off_t read_result = file_read(file, buffer, read_bytes);
+
+
+	if (read_result!= read_bytes) { // read 실패
 		return false;
 	} else {
-		memset(buffer + page_read_bytes, 0, page_zero_bytes); // zero_bytes만큼 0으로 초기화
+		// read 성공. zero_bytes만큼 0으로 초기화
+		memset(buffer + read_bytes, 0, page_zero_bytes); 
 		return true;
 	}
 
@@ -1021,16 +1028,18 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 		/* TODO: Set up aux to pass information to the lazy_load_segment. */
 		// void *aux = NULL;
 		// lazy load segment을 위한 aux를 설정
-		struct spt_copy_aux *load_info = (struct spt_copy_aux *)malloc(sizeof (struct spt_copy_aux));
+		struct spt_copy_aux *aux = (struct spt_copy_aux *)malloc(sizeof (struct spt_copy_aux));
 		// copy members of load_info
-		load_info->page_file = file;
-		load_info->offset = ofs;
-		load_info->read_bytes = page_read_bytes;
-		load_info->zero_bytes = page_zero_bytes;
+		aux->page_file = file;
+		aux->offset = ofs;
+		aux->read_bytes = page_read_bytes;
+		aux->zero_bytes = page_zero_bytes;
 		if (!vm_alloc_page_with_initializer (VM_ANON, upage,
-					writable, lazy_load_segment, load_info)) { // aux 대신 새로운 struct
+					writable, lazy_load_segment, aux)) { 
 			return false;
 		}
+
+		// edge case?
 
 		/* Advance. */
 		read_bytes -= page_read_bytes;
@@ -1055,8 +1064,7 @@ setup_stack (struct intr_frame *if_) {
 	if (page_init) {
 		if ( vm_claim_page(stack_bottom)) {
 	
-			if_->rsp = USER_STACK;
-			thread_current()->rsp = stack_bottom;
+			if_->rsp = USER_STACK; // rsp 설정
 			return true;
 
 		} else { // claim 실패

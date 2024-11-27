@@ -143,15 +143,9 @@ page_fault (struct intr_frame *f) {
 #ifdef VM
 	/* For project 3 and later. */
 
-	if (user){
-		struct thread *t = thread_current();
-		t->rsp = f->rsp;
-		
-	}
-	// running 상태가 아닌데 thread_current() 호출하면 에러가 난다.
-	// 그래서 running 상태인지 확인하는 코드를 넣어준다.
 	if (vm_try_handle_fault (f, fault_addr, user, write, not_present))
 		return;
+	
 	// else
 	// 	kill (f);
 	

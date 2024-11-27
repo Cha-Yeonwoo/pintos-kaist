@@ -17,9 +17,14 @@
 #include "devices/input.h"
 #include "lib/string.h"
 
+#include "vm/vm.h"
+
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
+
+void *mmap(void *addr, size_t length, bool writable, int fd, off_t offset);
+void munmap(void *addr);
 
 struct lock filesys_lock; 
 
@@ -290,6 +295,7 @@ int read (struct intr_frame *f) {
 	// check the buffer is valid
 	if (buf == NULL || !is_user_vaddr (buf)){
 		cur->exit_status = -1;
+		// msg("DEBUG: read buf is invalid");
 		thread_exit ();
 		return -1;
 	}
@@ -299,9 +305,12 @@ int read (struct intr_frame *f) {
 		uint64_t *pte = pml4e_walk (cur->pml4, (uint64_t) ptr, 0);
 		if (pte == NULL ||is_kern_pte(pte) ){
 			cur->exit_status = -1;
+			// msg("DEBUG: read pte is invalid");
+			// 몇몇 케이스들의 paraent가 여기서 걸린다...
 			thread_exit ();
 			return -1;
 		}
+		
 	}
 
 	lock_acquire (&filesys_lock);
@@ -313,11 +322,13 @@ int read (struct intr_frame *f) {
 
 		}
 		else if (filde->is_file == 1) {
+			// msg("DEBUG: read from console");
 			ret = -1;
 
 		}
 		else{ // FILE
 			ret = file_read (filde->file, buf, size);
+			// msg("DEBUG: read from file, %d", ret);
 		}
 	}
 	lock_release (&filesys_lock);
@@ -576,9 +587,61 @@ syscall_handler (struct intr_frame *f) {
 		case SYS_DUP2:
 			f->R.rax = dup2 (f->R.rdi, f->R.rsi);
 			break;
+		case SYS_MMAP:
+			f->R.rax = (uint64_t)mmap((void *) f->R.rdi, (size_t) f->R.rsi, (int) f->R.rdx, (int) f->R.r10, (off_t) f->R.r8);
+			break;
+		case SYS_MUNMAP:
+			munmap((void *) f->R.rdi);
+			break;
 		default:
 			printf ("Unexpected Syscall: %llx", f->R.rax);
 			f->R.rax = -1;
 			break;
 	}
  }
+
+
+ /* Project 3 */
+
+void *mmap(void *addr, size_t length, bool writable, int fd, off_t offset){
+	// TODO: implement mmap
+	struct thread *cur = thread_current();
+	struct file_des *filde;
+	struct file *file;
+	off_t ofs;
+	size_t page_read_bytes; // page에서 읽어야 하는 바이트 수
+	size_t page_zero_bytes; // page에서 0으로 채워야 하는 바이트 수
+	bool success = true;
+
+	// addr을 리턴하는 함수임
+	// 실패하면 -1이 아니라 NULL을 리턴해야함.. 당연함...
+
+	if (length <= 0 || pg_ofs(addr) != 0 || addr == NULL || fd < 2) {
+		return NULL;
+	}
+
+	if (spt_find_page(&cur->spt, addr) != NULL) {
+		// already mapped
+		return NULL;
+	}
+
+	filde = find_filde_by_fd(fd);
+	if (filde == NULL) {
+		return NULL;
+	}
+	file = file_reopen(filde->file);
+
+	if (file == NULL) {
+
+		return NULL;
+	}
+
+
+	return do_mmap(addr, length, writable, file, offset);
+}
+
+
+void munmap(void *addr){
+	do_munmap(addr);
+
+}

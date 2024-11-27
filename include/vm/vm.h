@@ -64,14 +64,14 @@ struct page {
 
 /* The representation of "frame" */
 struct frame {
-	void *kva;
+	void *kva; // Kernel virtual address. physical adress에 직접 매핑되어있는 주소
 	struct page *page;
 
 	/* VM */
 	struct list_elem elem; // For frame table 
 };
 
-//파일 내용을 lazy_load_segment으로 넘겨줄때 필수적으로 넘겨줘야하는 정보들
+//파일 내용을 lazy_load_segment으로 넘겨줘야하는 정보들
 struct spt_copy_aux {
 	struct file *page_file;
 	off_t offset;
@@ -99,7 +99,7 @@ struct page_operations {
  * We don't want to force you to obey any specific design for this struct.
  * All designs up to you for this. */
 struct supplemental_page_table {
-	struct hash pages_map;
+	struct hash pages_map; // Virtual address와 page를 매핑하기 위한 hash table
 };
 
 #include "threads/thread.h"
