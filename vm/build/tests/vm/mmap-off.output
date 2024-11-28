@@ -4,8 +4,8 @@ Kernel command line: -q -f put mmap-off put large.txt run mmap-off
 Pintos booting with: 
 	base_mem: 0x0 ~ 0x9fc00 (Usable: 639 kB)
 	ext_mem: 0x100000 ~ 0x13e0000 (Usable: 19,328 kB)
-Calibrating timer...  156,876,800 loops/s.
-hd0:0: detected 345 sector (172 kB) disk, model "QEMU HARDDISK", serial "QM00001"
+Calibrating timer...  157,081,600 loops/s.
+hd0:0: detected 353 sector (176 kB) disk, model "QEMU HARDDISK", serial "QM00001"
 hd0:1: detected 20,160 sector (9 MB) disk, model "QEMU HARDDISK", serial "QM00002"
 hd1:0: detected 7,933 sector (3 MB) disk, model "QEMU HARDDISK", serial "QM00003"
 hd1:1: detected 8,064 sector (3 MB) disk, model "QEMU HARDDISK", serial "QM00004"
@@ -15,4 +15,19 @@ Putting 'mmap-off' into the file system...
 Putting 'large.txt' into the file system...
 Executing 'mmap-off':
 (mmap-off) begin
-TIMEOUT
+(mmap-off) open "large.txt"
+(mmap-off) try to mmap with offset 0x1000
+(mmap-off) validate mmap.
+(mmap-off) validate fail.: FAILED
+mmap-off: exit(1)
+Execution of 'mmap-off' complete.
+Timer: 315 ticks
+Thread: 120 idle ticks, 191 kernel ticks, 4 user ticks
+hd0:0: 0 reads, 0 writes
+hd0:1: 120 reads, 15904 writes
+hd1:0: 7933 reads, 0 writes
+hd1:1: 0 reads, 0 writes
+Console: 1120 characters output
+Keyboard: 0 keys pressed
+Exception: 0 page faults
+Powering off...

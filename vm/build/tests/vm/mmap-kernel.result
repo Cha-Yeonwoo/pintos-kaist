@@ -1,1 +1,2 @@
-PASS
+FAIL
+run: try to mmap over kernel 0: FAILED

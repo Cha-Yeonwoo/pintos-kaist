@@ -1,2 +1,2 @@
 FAIL
-run: mmap "sample.txt" #0 at 0x10000000: FAILED
+run: compare mmap'd file 0 against data: FAILED

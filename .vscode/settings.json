@@ -11,6 +11,7 @@
         "syscall.h": "c",
         "file.h": "c",
         "inode.h": "c",
-        "list.h": "c"
+        "list.h": "c",
+        "loader.h": "c"
     }
 }

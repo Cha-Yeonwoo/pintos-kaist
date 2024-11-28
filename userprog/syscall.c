@@ -26,7 +26,6 @@ void syscall_handler (struct intr_frame *);
 void *mmap(void *addr, size_t length, bool writable, int fd, off_t offset);
 void munmap(void *addr);
 
-struct lock filesys_lock; 
 
 
 /* System call.
@@ -620,28 +619,52 @@ void *mmap(void *addr, size_t length, bool writable, int fd, off_t offset){
 		return NULL;
 	}
 
-	if (spt_find_page(&cur->spt, addr) != NULL) {
-		// already mapped
-		return NULL;
-	}
+	length = (size_t) pg_round_up((void *) length); // length를 페이지 크기의 배수로 만들어야 함.
+
+	// if (spt_find_page(&cur->spt, addr) != NULL) {
+	// 	// already mapped
+	// 	return NULL;
+	// }
+	for (int i = 0; i < length; i += PGSIZE) {
+		//  for already mapped cases
+		// 어짜피 addr round down하는데 for문을 돌려야 하는 이유가 있나?
+        if (spt_find_page(&cur->spt, addr + i) != NULL) {
+            return NULL;
+        }
+    }
 
 	filde = find_filde_by_fd(fd);
-	if (filde == NULL) {
+	if (filde == NULL || filde->file == NULL) {
 		return NULL;
 	}
 	file = file_reopen(filde->file);
 
 	if (file == NULL) {
-
+		// reopen 실패
 		return NULL;
 	}
+	
+	void *result = do_mmap(addr, length, writable, file, offset);
+	if (result == NULL) {
+		file_close(file); // 실패 시 파일 닫기
+		return NULL;
+	}
+	return result; // 성공 시 addr 리턴
 
-
-	return do_mmap(addr, length, writable, file, offset);
 }
 
 
 void munmap(void *addr){
+	struct thread *cur = thread_current();
+
+	if (addr == NULL) {
+		return;
+	}
+
+	if (!spt_find_page(&cur->spt, addr)) {
+		// not mapped
+		return;
+	}
 	do_munmap(addr);
 
 }

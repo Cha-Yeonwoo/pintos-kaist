@@ -1,13 +1,1 @@
-FAIL
-Kernel panic in run: PANIC at ../../filesys/file.c:152 in file_seek(): assertion `file != NULL' failed.
-Call stack: 0x8004218cff 0x80042211f4 0x800421db24 0x80042238ff 0x80042234ef 0x8004223392 0x800421e2c5 0x80042098c7 0x8004209ce5
-Translation of call stack:
-0x0000008004218cff: debug_panic (lib/kernel/debug.c:32)
-0x00000080042211f4: file_seek (filesys/file.c:153)
-0x000000800421db24: lazy_load_segment (userprog/process.c:977)
-0x00000080042238ff: uninit_initialize (vm/uninit.c:55 (discriminator 4))
-0x00000080042234ef: vm_do_claim_page (vm/vm.c:328)
-0x0000008004223392: vm_try_handle_fault (vm/vm.c:272)
-0x000000800421e2c5: page_fault (userprog/exception.c:146)
-0x00000080042098c7: intr_handler (threads/interrupt.c:352)
-0x0000008004209ce5: intr_entry (threads/intr-stubs.o:?)
+PASS

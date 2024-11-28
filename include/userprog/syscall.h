@@ -22,6 +22,6 @@ struct dfile {
 };
 
 
-
+struct lock filesys_lock;  // file system lock
 
 #endif /* userprog/syscall.h */

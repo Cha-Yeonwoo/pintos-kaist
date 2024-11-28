@@ -8,7 +8,7 @@
 #include <list.h>
 
 struct list frame_table; /* The frame table. */
-struct lock frame_lock; // 필요하려나? 
+// struct lock frame_lock; // 필요하려나? 
 
 /* Helper */
 int spt_hash (const struct hash_elem *elem, void *aux);
@@ -27,6 +27,7 @@ vm_init (void) {
 	/* DO NOT MODIFY UPPER LINES. */
 	/* TODO: Your code goes here. */
 	list_init (&frame_table); // Initialize frame table
+	// TODO: is there any other initialization?
 }
 
 /* Get the type of the page. This function is useful if you want to know the
@@ -75,10 +76,8 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 		else if (VM_TYPE(type) == VM_FILE) {
 			uninit_new(new_page, upage, init, type, aux, file_backed_initializer);
 		} 
-		else { // vm type is VM_PAGE_CACHE
-			;
-			// lazy load ?
-
+		else {
+			; // VM_PAGE_CACHE인 경우는 일단 무시?
 		}
 
 		new_page->writable = writable;
@@ -86,9 +85,15 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 
 		// msg("DEBUG: vm_alloc_page_with_initializer %p", new_page);
 		/* TODO: Insert the page into the spt. */
-		return spt_insert_page (spt, new_page); // insert page into spt
+		// return spt_insert_page (spt, new_page); // insert page into spt
+		if (!spt_insert_page(spt, new_page)) {
+			free(new_page);
+			goto err;
+		}
+		return true;
 		
 	}
+
 err:
 	return false;
 }
@@ -108,6 +113,7 @@ spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
 	struct hash_elem *e = hash_find(&(spt->pages_map), &(page_start->hash_elem)); // spt에서 page를 찾아온다
 
 	if (e==NULL){
+		// free (page);
 		return NULL; // page가 없으면 NULL을 반환
 	}
 	page = hash_entry(e, struct page, hash_elem);
@@ -134,6 +140,7 @@ spt_insert_page (struct supplemental_page_table *spt UNUSED,
 
 void
 spt_remove_page (struct supplemental_page_table *spt, struct page *page) {
+	hash_delete (&spt->pages_map, &page->hash_elem);
 
 	vm_dealloc_page (page);
 }
@@ -212,20 +219,33 @@ vm_stack_growth (void *addr UNUSED) {
 	// 일단 stack growth가 가능한지 체크
 	// rsp 관련도 필요할까?
 	const uint64_t STACK_SIZE = 0x100000; // 1MB
-	if (addr < USER_STACK && addr > (USER_STACK - STACK_SIZE) ) {
-		// stack size가 너무 커서 할당이 불가능한 경우
-		return;
+	// if (addr < USER_STACK && addr > (USER_STACK - STACK_SIZE) ) {
+	// 	// addr 범위가 스택 범위 안에 있는지 확인
+	// 	return;
+	// }
+	// struct thread *cur = thread_current();
+
+	// // bool alloc_succ = vm_alloc_page(VM_ANON | VM_MARKER_1, adjusted_addr, true); // stack page 생성
+	// if (!vm_alloc_page(VM_ANON | VM_MARKER_1, adjusted_addr, true)) {
+	// 	return;
+	// }
+
+
+	// if (!vm_claim_page(adjusted_addr)) {
+	// 	return;
+	// }
+	while (adjusted_addr < USER_STACK && adjusted_addr >= (USER_STACK - STACK_SIZE)) {
+		if (!vm_alloc_page(VM_ANON | VM_MARKER_1, adjusted_addr, true)) {
+			return; // page 생성 실패
+		}
+		if (!vm_claim_page(adjusted_addr)) {
+			// printf("DEBUG: Failed to claim page for address %p\n", adjusted_addr);
+			return; // claim page 실패
+		}
+		adjusted_addr += PGSIZE;
 	}
 
-
-	bool alloc_succ = vm_alloc_page(VM_ANON | VM_MARKER_1, adjusted_addr, true); // stack page 생성
-	if (alloc_succ) { 
-		struct page *pg = spt_find_page(&thread_current()->spt, adjusted_addr);
-        vm_claim_page(adjusted_addr);
-        adjusted_addr += PGSIZE;
-		alloc_succ = vm_alloc_page(VM_ANON | VM_MARKER_1, adjusted_addr, true);
-	}
-
+	
 }
 
 /* Handle the fault on write_protected page */
@@ -372,8 +392,9 @@ supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
 			// VM_UNINIT인 경우에는 aux를 복사해서 initializer를 사용해서 page를 생성
 			if (src_page->uninit.type == VM_ANON) { // VM_ANON일 경우, aux를 복사해서 initializer를 사용해서 page를 생성
 							
-				void *src_aux = (struct spt_copy_aux *) malloc(sizeof(struct spt_copy_aux)); // aux를 복사하기 위한 공간 할당
-				memcpy(src_aux, src_page->uninit.aux, sizeof(struct spt_copy_aux));  // uninit은 void * aux를 가지는데, 이것을 이용하면 될 것 같다.
+				// void *src_aux = (struct spt_copy_aux *) malloc(sizeof(struct spt_copy_aux)); // aux를 복사하기 위한 공간 할당
+				void *src_aux = (struct file_page *) malloc(sizeof(struct file_page)); // aux를 복사하기 위한 공간 할당
+				memcpy(src_aux, src_page->uninit.aux, sizeof(struct file_page));  // uninit은 void * aux를 가지는데, 이것을 이용하면 될 것 같다.
 
 				// page에 맞는 initializer를 사용
 				if (!vm_alloc_page_with_initializer(VM_ANON, src_page->va, src_page->writable, src_page->uninit.init, src_aux)) {

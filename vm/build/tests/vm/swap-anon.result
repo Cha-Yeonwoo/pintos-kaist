@@ -1,16 +1,2 @@
 FAIL
-Kernel panic in run: PANIC at ../../threads/palloc.c:321 in palloc_free_multiple(): assertion `bitmap_all (pool->used_map, page_idx, page_cnt)' failed.
-Call stack: 0x8004218cff 0x800420c5bc 0x800420c609 0x800420d93b 0x800420d9be 0x800420da41 0x800420db0a 0x800421d1cc 0x800421d0b8 0x800420744e 0x800421f77c 0x800421e41a
-Translation of call stack:
-0x0000008004218cff: debug_panic (lib/kernel/debug.c:32)
-0x000000800420c5bc: palloc_free_multiple (threads/palloc.c:322)
-0x000000800420c609: palloc_free_page (threads/palloc.c:329)
-0x000000800420d93b: pt_destroy (threads/mmu.c:160 (discriminator 2))
-0x000000800420d9be: pgdir_destroy (threads/mmu.c:170 (discriminator 2))
-0x000000800420da41: pdpe_destroy (threads/mmu.c:180 (discriminator 2))
-0x000000800420db0a: pml4_destroy (threads/mmu.c:199)
-0x000000800421d1cc: process_cleanup (userprog/process.c:553)
-0x000000800421d0b8: process_exit (userprog/process.c:517)
-0x000000800420744e: thread_exit (threads/thread.c:365)
-0x000000800421f77c: syscall_handler (userprog/syscall.c:552)
-0x000000800421e41a: no_sti (userprog/syscall-entry.o:?)
+run: TIMEOUT

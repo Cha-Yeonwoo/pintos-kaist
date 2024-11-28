@@ -955,34 +955,37 @@ install_page (void *upage, void *kpage, bool writable) {
  * If you want to implement the function for only project 2, implement it on the
  * upper block. */
 
-static bool
-lazy_load_segment (struct page *page, void *aux) {
+bool
+lazy_load_segment (struct page *page, struct file_page *aux) { // static 지웟는데 문제없겟지
 	/* TODO: Load the segment from the file */
 	/* TODO: This called when the first page fault occurs on address VA. */
 	/* TODO: VA is available when calling this function. */
 	// struct file *file = NULL;
 
-	struct spt_copy_aux *load_info = (struct spt_copy_aux *)aux;
+	// struct spt_copy_aux *load_info = (struct spt_copy_aux *)aux;
+	// struct file_page *load_info = (struct file_page *)aux;
 
-	struct file *file = load_info->page_file;
-	off_t offset = load_info->offset; 
-	size_t read_bytes = load_info->read_bytes;
-	size_t page_zero_bytes = load_info->zero_bytes;
-	void *buffer = page->frame->kva;
+	struct file *file = aux->file;
+	off_t offset = aux->ofs; 
+	size_t read_bytes = aux->read_bytes;
+	size_t page_zero_bytes = aux->zero_bytes;
+	void *buffer = page->frame->kva; 
 
 	if (file == NULL) {
+
 		return false;
 	}
 
 	//파일 위치를 찾기 위해
 	file_seek(file, offset);
 	
-
-	//offset에 담긴 파일을 물리 프레임으로부터 읽어야하기 때문에 page의 frame에 접근해서 kernel의 주소를 사용해서 읽는다
+	lock_acquire (&filesys_lock);
+	//offset에 담긴 파일을 물리 프레임으로부터 읽어야함.
 	off_t read_result = file_read(file, buffer, read_bytes);
+	lock_release (&filesys_lock);
 
-
-	if (read_result!= read_bytes) { // read 실패
+	if (read_result!= read_bytes) { 
+		// Lazy load 실패
 		return false;
 	} else {
 		// read 성공. zero_bytes만큼 0으로 초기화
@@ -1028,10 +1031,10 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 		/* TODO: Set up aux to pass information to the lazy_load_segment. */
 		// void *aux = NULL;
 		// lazy load segment을 위한 aux를 설정
-		struct spt_copy_aux *aux = (struct spt_copy_aux *)malloc(sizeof (struct spt_copy_aux));
+		struct file_page *aux = (struct file_page *)malloc(sizeof (struct file_page));
 		// copy members of load_info
-		aux->page_file = file;
-		aux->offset = ofs;
+		aux->file = file;
+		aux->ofs = ofs;
 		aux->read_bytes = page_read_bytes;
 		aux->zero_bytes = page_zero_bytes;
 		if (!vm_alloc_page_with_initializer (VM_ANON, upage,
@@ -1060,20 +1063,25 @@ setup_stack (struct intr_frame *if_) {
 	 * TODO: If success, set the rsp accordingly.
 	 * TODO: You should mark the page is stack. */
 	/* TODO: Your code goes here */
-	bool page_init = vm_alloc_page(VM_ANON | VM_MARKER_0, stack_bottom, true); // stack page 생성
-	if (page_init) {
-		if ( vm_claim_page(stack_bottom)) {
-	
-			if_->rsp = USER_STACK; // rsp 설정
-			return true;
-
-		} else { // claim 실패
-			return success; // failed
-		}
+	if (!is_user_vaddr(stack_bottom)){
+		return success; // failed
 	}
+
+	if (!vm_alloc_page(VM_ANON | VM_MARKER_0, stack_bottom, true)) { 
+		// TODO: writable에 true 맞는지 확인
+		// TODO: VM_MARKER_0이 맞는지 확인
+		return success; // failed
+	}
+	if ( !vm_claim_page(stack_bottom)) {
+	
+		vm_dealloc_page(stack_bottom);
+		return success; // failed
+	} 
+	if_->rsp = USER_STACK; // rsp를 USER_STACK으로 설정
+	success = true;
 	// msg("DEBUG: setup_stack success = %d", success);
 	// msg("DEBUG: if_->rsp = %p", if_->rsp);
-	NOT_REACHED (); // 디버깅
+	// NOT_REACHED (); // 디버깅
 	return success;
 }
 #endif /* VM */
