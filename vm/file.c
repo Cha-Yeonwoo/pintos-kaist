@@ -46,23 +46,23 @@ file_backed_initializer (struct page *page, enum vm_type type, void *kva) {
 static bool
 file_backed_swap_in (struct page *page, void *kva) {
 	// struct file_page *file_page UNUSED = &page->file;
-	// sturct 괜히 만들었네 file_page 쓰면 되는거였음...
-	struct file_page *file_page = &page->file;
+	
+	struct file_page *file_page = (struct file_page *) &page->file;
+
 	 if (page == NULL || kva == NULL || page->operations->type != VM_FILE) {
         return false;
     }
 
-	// struct file *file = file_page->file;       // 파일 포인터
-    // off_t offset = file_page->offset;          // 파일에서 읽기 시작할 위치
-    // size_t read_bytes = file_page->read_bytes; // 읽어야 할 바이트 수
-    // size_t zero_bytes = file_page->zero_bytes; // 0으로 채울 바이트 수
+    struct file_page *aux = (struct file_page *) page->uninit.aux; // uninit.aux에는 file_page가 들어있음?
+    
+    file_seek(aux->file, aux->ofs);
+    if (file_read(aux->file, kva, aux->read_bytes) != (int)aux->read_bytes) {
+        return false;
+    }
+    memset(kva + aux->read_bytes, 0, aux->zero_bytes); // zero_bytes만큼 0으로 초기화
 
-	if (lazy_load_segment(page, file_page)){
-		return true;
-	}
-	else{
-		return false;
-	}
+   
+    return true;
 
 
 
@@ -82,34 +82,12 @@ file_backed_swap_out (struct page *page) {
     void *kva = page->frame->kva;
 
 
+    struct file_page *aux = (struct file_page *) page->uninit.aux;
+
 	if (pml4_is_dirty(thread_current()->pml4, page->va)) {
-        off_t offset = file_page->ofs;
-        size_t write_bytes = file_page->read_bytes;
-
-        if (file != NULL) {
-            file_seek(file, offset);
-            if (file_write_at(file, kva, write_bytes, offset) != (int)write_bytes) {
-                printf("DEBUG: Failed to write page to file\n");
-                return false; // 파일 쓰기 실패
-            }
-        }
-		pml4_clear_page(thread_current()->pml4, page->va);
-
+        file_write_at(aux->file, page->va, aux->read_bytes, aux->ofs);
         pml4_set_dirty(thread_current()->pml4, page->va, false);
-    }
-	else{
-		// dirty가 아니면 그냥 clear만 해주면 됨
-    	pml4_clear_page(thread_current()->pml4, page->va);
-	}
-
-
-    page->frame = NULL; // 물리 프레임 참조 제거
-
-    return true;
-
-
-
-
+    } 
 
 	return true;
 }
@@ -154,6 +132,7 @@ do_mmap(void *addr, size_t length, int writable, struct file *file, off_t offset
         file_close(reopen_file);
         return NULL;
     }
+    // TODO: offset이 valid한지도 체크해야함.
 
     size_t file_length_remaining = file_length(reopen_file) - offset;
     size_t read_len = file_length_remaining < length ? file_length_remaining : length;
@@ -254,17 +233,19 @@ do_munmap (void *addr) {
             // printf("DEBUG: Invalid address %p during munmap\n", addr);
             break;
         }
-        // if (pml4_is_dirty(cur->pml4, page->va)) {
-        //     // 적당히 write_at으로 처리하고
-        //     // dirty flag를 clear해준다 (0으로)
-        //     struct file_page *file_page = (struct file_page *)page->uninit.aux;
+        if (pml4_is_dirty(cur->pml4, page->va)) {
+            // 적당히 write_at으로 처리하고
+            // dirty flag를 clear해준다 (0으로)
+            struct file_page *file_page = (struct file_page *)page->uninit.aux;
+            file_write_at(file_page->file, addr, file_page->read_bytes, file_page->ofs);
+            pml4_set_dirty(cur->pml4, page->va, 0);
 
 
-        // }
+        }
 
         pml4_clear_page(cur->pml4, page->va);
-        spt_remove_page(&cur->spt, page);
-        addr += PGSIZE;
+        spt_remove_page(&cur->spt, page); // 이게 필요했구나..?
+        addr += PGSIZE;ㄴ
     }
 
 }

@@ -58,19 +58,18 @@ static bool
 anon_swap_in (struct page *page, void *kva) {
 	struct anon_page *anon_page = &page->anon;
 
-
 	if (!bitmap_test(swap_table, anon_page->swap_index)) {
 		return false;
 	}
 	bitmap_reset(swap_table, anon_page->swap_index); // reset the bitmap
-	size_t sector_idx = anon_page->swap_index * 8; // get the sector index
+	size_t sector_idx = anon_page->swap_index * 8;   // get the sector index
 
 	for (int i = 0; i < 8; i++) {
 		disk_read(swap_disk, sector_idx + i, kva + i * DISK_SECTOR_SIZE); // read the contents from the swap disk
 	}
 
 	page->frame->kva = kva;
-	page->frame->page = page;
+	page->frame->page = page; // 필요한가?
 
 	return true;
 

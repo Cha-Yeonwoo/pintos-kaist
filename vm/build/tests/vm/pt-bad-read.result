@@ -1,2 +1,17 @@
 FAIL
-run: survived reading data into bad address: FAILED
+Kernel panic in run: PANIC at ../../userprog/exception.c:97 in kill(): Kernel bug - unexpected interrupt in kernel
+Call stack: 0x8004218cff 0x800421e1b2 0x800421e3af 0x80042098c7 0x8004209ce5 0x8004222140 0x80042210c5 0x800421f01a 0x800421f985 0x800421e42b 0x40016a 0x400c38 0x400c81
+Translation of call stack:
+0x0000008004218cff: debug_panic (lib/kernel/debug.c:32)
+0x000000800421e1b2: kill (userprog/exception.c:103)
+0x000000800421e3af: page_fault (userprog/exception.c:169 (discriminator 12))
+0x00000080042098c7: intr_handler (threads/interrupt.c:352)
+0x0000008004209ce5: intr_entry (threads/intr-stubs.o:?)
+0x0000008004222140: inode_read_at (filesys/inode.c:220)
+0x00000080042210c5: file_read (filesys/file.c:75)
+0x000000800421f01a: read (userprog/syscall.c:354)
+0x000000800421f985: syscall_handler (userprog/syscall.c:605)
+0x000000800421e42b: no_sti (userprog/syscall-entry.o:?)
+0x000000000040016a: (unknown)
+0x0000000000400c38: (unknown)
+0x0000000000400c81: (unknown)
