@@ -16,30 +16,16 @@ Putting 'sample.txt' into the file system...
 Executing 'pt-bad-read':
 (pt-bad-read) begin
 (pt-bad-read) open "sample.txt"
-Page fault at 0x4747ef8c: not present error writing page in kernel context.
-Interrupt 0x0e (#PF Page-Fault Exception) at rip=8004217ca8
- cr2=000000004747ef8c error=               2
-rax 000000004747ef8c rbx 000000004747ff20 rcx 000000004747ef8d rdx 000000000000003d
-rsp 0000008004245dc0 rbp 0000008004245df0 rsi 000000800424f018 rdi 000000004747ef8c
-rip 0000008004217ca8 r8 0000000000000000  r9 0000000000000000 r10 0000000000000000
-r11 0000000000000202 r12 000000800421f7b7 r13 0000000000000200 r14 00008004245f0000
-r15 0000800422bb0000 rflags 00000202
-es: 001b ds: 001b cs: 0008 ss: 0010
-Kernel PANIC at ../../userprog/exception.c:97 in kill(): Kernel bug - unexpected interrupt in kernel
-Call stack: 0x8004218cff 0x800421e1b2 0x800421e3af 0x80042098c7 0x8004209ce5 0x8004222182 0x8004221107 0x800421f01a 0x800421f985 0x800421e42b 0x40016a 0x400c38 0x400c81 0Interrupt 0x0d (#GP General Protection Exception) at rip=8004215d39
- cr2=000000004747ef8c error=               0
-rax 00008004208a3a00 rbx 000000004747ff20 rcx 00000080040b8000 rdx 00000000000003d4
-rsp 0000008004245bb0 rbp 0000008004245bc0 rsi 0000000000008a0f rdi 0000000000000000
-rip 0000008004215d39 r8 0000008004245ac8  r9 000000800421c178 r10 0000000000000000
-r11 0000000000000202 r12 000000800421f7b7 r13 0000000000000200 r14 00008004245f0000
-r15 0000800422bb0000 rflags 00000006
-es: 0010 ds: 0010 cs: 0008 ss: 0010
-Kernel PANIC recursion at ../../userprog/exception.c:97 in kill().
-Timer: 86 ticks
-Thread: 34 idle ticks, 48 kernel ticks, 4 user ticks
+(pt-bad-read) survived reading data into bad address: FAILED
+pt-bad-read: exit(1)
+Execution of 'pt-bad-read' complete.
+Timer: 91 ticks
+Thread: 34 idle ticks, 53 kernel ticks, 4 user ticks
 hd0:0: 0 reads, 0 writes
 hd0:1: 112 reads, 250 writes
 hd1:0: 106 reads, 0 writes
 hd1:1: 0 reads, 0 writes
-Console: 2428 characters output
-Key
+Console: 1099 characters output
+Keyboard: 0 keys pressed
+Exception: 0 page faults
+Powering off...

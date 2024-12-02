@@ -22,13 +22,13 @@ Executing 'lg-random':
 (lg-random) end
 lg-random: exit(0)
 Execution of 'lg-random' complete.
-Timer: 92 ticks
-Thread: 35 idle ticks, 48 kernel ticks, 9 user ticks
+Timer: 96 ticks
+Thread: 36 idle ticks, 48 kernel ticks, 13 user ticks
 hd0:0: 0 reads, 0 writes
 hd0:1: 257 reads, 560 writes
 hd1:0: 110 reads, 0 writes
 hd1:1: 0 reads, 0 writes
-Console: 1114 characters output
+Console: 1115 characters output
 Keyboard: 0 keys pressed
 Exception: 0 page faults
 Powering off...

@@ -335,13 +335,21 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 				// 현재 addr가 rsp 주변이면 stack growth를 한다
 				vm_stack_growth(addr);
 			}
+			else if (addr < USER_STACK && addr >= (USER_STACK - 0x800000)) {
+				// stack growth가 가능한지 확인
+				vm_stack_growth(addr);
+			}
 			else{
-		
 				succ = false;
 			}
+		}
+		else{
+	
+			succ = false;
+		}
 			// vm_stack_growth(addr); // stack을 확장시킨다
 			// 아무떄나 stack growth를 하면 안될듯하다. -> 무한 루프의 주범
-		}
+		// }
 	} else {
 		if (write && page->writable == false) {
 			// 읽기 전용 페이지에 쓰려고 할 때
@@ -360,6 +368,7 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	// return true; // 무작정 true 리턴하면?
 
 }
+
 
 /* Free the page.
  * DO NOT MODIFY THIS FUNCTION. */

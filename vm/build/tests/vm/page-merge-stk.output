@@ -4,7 +4,7 @@ Kernel command line: -q -f put page-merge-stk put child-qsort run page-merge-stk
 Pintos booting with: 
 	base_mem: 0x0 ~ 0x9fc00 (Usable: 639 kB)
 	ext_mem: 0x100000 ~ 0x13e0000 (Usable: 19,328 kB)
-Calibrating timer...  157,081,600 loops/s.
+Calibrating timer...  155,648,000 loops/s.
 hd0:0: detected 353 sector (176 kB) disk, model "QEMU HARDDISK", serial "QM00001"
 hd0:1: detected 20,160 sector (9 MB) disk, model "QEMU HARDDISK", serial "QM00002"
 hd1:0: detected 224 sector (112 kB) disk, model "QEMU HARDDISK", serial "QM00003"
@@ -23,30 +23,32 @@ Executing 'page-merge-stk':
 (page-merge-stk) sort chunk 4
 (page-merge-stk) sort chunk 5
 (page-merge-stk) sort chunk 6
+load: child-qsort: open failed
+child-qsort: exit(-1)
 (page-merge-stk) sort chunk 7
 (page-merge-stk) wait for child 0
-(child-qsort) open "buf5": FAILED
-child-qsort: exit(1)
-(child-qsort) open "buf2": FAILED
+(child-qsort) open "buf3": FAILED
 child-qsort: exit(1)
 child-qsort: exit(72)
 child-qsort: exit(72)
 child-qsort: exit(72)
-child-qsort: exit(72)
+(child-qsort) open "buf6": FAILED
+child-qsort: exit(1)
 child-qsort: exit(72)
 child-qsort: exit(72)
 (page-merge-stk) wait for child 1
 (page-merge-stk) wait for child 2
-(page-merge-stk) wait for child 2: FAILED
+(page-merge-stk) wait for child 3
+(page-merge-stk) wait for child 3: FAILED
 page-merge-stk: exit(1)
 Execution of 'page-merge-stk' complete.
-Timer: 325 ticks
-Thread: 82 idle ticks, 62 kernel ticks, 181 user ticks
+Timer: 310 ticks
+Thread: 71 idle ticks, 68 kernel ticks, 171 user ticks
 hd0:0: 0 reads, 0 writes
-hd0:1: 2782 reads, 6214 writes
+hd0:1: 2746 reads, 5958 writes
 hd1:0: 224 reads, 0 writes
 hd1:1: 0 reads, 0 writes
-Console: 1684 characters output
+Console: 1749 characters output
 Keyboard: 0 keys pressed
 Exception: 0 page faults
 Powering off...

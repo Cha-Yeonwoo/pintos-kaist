@@ -307,7 +307,7 @@ int read (struct intr_frame *f) {
 	if (spt_find_page(&cur->spt, (void*)buf) != NULL && spt_find_page(&cur->spt, (void*)buf)->writable == 0){ 
 		// msg("DEBUG: read page is not valid");
 		cur->exit_status = -1;
-		printf("%s: exit(%d)\n", cur->name, cur->exit_status);
+		//printf("%s: exit(%d)\n", cur->name, cur->exit_status);
 		thread_exit ();
 		return -1;
 	}
