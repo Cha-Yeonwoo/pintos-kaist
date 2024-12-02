@@ -204,49 +204,68 @@ do_munmap (void *addr) {
 	}
 
 	struct page *page = spt_find_page(&thread_current()->spt, addr);
-	// struct thread *cur = thread_current();
+	struct thread *cur = thread_current();
 
 	if (page == NULL) {
 		return;
 	}
 	
-	while (page != NULL && is_user_vaddr(page->va)) {
-		// TODO: clear and remove if necessary
-		struct file_page *file_page = &page->file; // 
-        // struct file_page *file_page = page->uninit.aux;
-        // 뭔가 file_page 제대로 못넘겨받는거 같은데...
+	// while (page != NULL && is_user_vaddr(page->va)) {
+	// 	// TODO: clear and remove if necessary
+	// 	struct file_page *file_page = &page->file; // 
+    //     // struct file_page *file_page = page->uninit.aux;
+    //     // 뭔가 file_page 제대로 못넘겨받는거 같은데...
 
 
-		if (pml4_is_dirty(page->page_thread->pml4, page->va)) {
-            // 파일 기반 페이지인 경우
-            if (page->operations->type == VM_FILE) {
-                struct file *file = file_page->file;
-                off_t offset = file_page->ofs;
-                size_t write_bytes = file_page->read_bytes;
+	// 	if (pml4_is_dirty(page->page_thread->pml4, page->va)) {
+    //         // 파일 기반 페이지인 경우
+    //         if (page->operations->type == VM_FILE) {
+    //             struct file *file = file_page->file;
+    //             off_t offset = file_page->ofs;
+    //             size_t write_bytes = file_page->read_bytes;
 
-                // 파일에 데이터를 기록
-                if (file != NULL) {
-                    file_seek(file, offset);
-                    if (file_write_at(file, page->frame->kva, write_bytes, offset) != (int)write_bytes) {
-                        // printf("DEBUG: Failed to write dirty page to file\n");
-						;
-						return;
-                    }
-                }
-            }
-            // Dirty 플래그 초기화
-            pml4_set_dirty(page->page_thread->pml4, page->va, false);
+    //             // 파일에 데이터를 기록
+    //             if (file != NULL) {
+    //                 file_seek(file, offset);
+    //                 if (file_write_at(file, page->frame->kva, write_bytes, offset) != (int)write_bytes) {
+    //                     // printf("DEBUG: Failed to write dirty page to file\n");
+	// 					;
+	// 					return;
+    //                 }
+    //             }
+    //         }
+    //         // Dirty 플래그 초기화
+    //         pml4_set_dirty(page->page_thread->pml4, page->va, false);
+    //     }
+
+	// 	pml4_clear_page(page->page_thread->pml4, page->va);
+    //     // spt_remove_page(&cur->spt, page);
+
+    //     // 다음 페이지로 이동
+    //     addr += PGSIZE;
+    //     page = spt_find_page(&page->page_thread->spt, addr); 
+
+
+	// }
+    // 다시 해보자...
+    while (is_user_vaddr(addr)) {
+        struct page *page = spt_find_page(&cur->spt, addr);
+        if (page == NULL) {
+            // printf("DEBUG: Invalid address %p during munmap\n", addr);
+            break;
         }
+        // if (pml4_is_dirty(cur->pml4, page->va)) {
+        //     // 적당히 write_at으로 처리하고
+        //     // dirty flag를 clear해준다 (0으로)
+        //     struct file_page *file_page = (struct file_page *)page->uninit.aux;
 
-		pml4_clear_page(page->page_thread->pml4, page->va);
-        // spt_remove_page(&cur->spt, page);
 
-        // 다음 페이지로 이동
+        // }
+
+        pml4_clear_page(cur->pml4, page->va);
+        spt_remove_page(&cur->spt, page);
         addr += PGSIZE;
-        page = spt_find_page(&page->page_thread->spt, addr); 
-
-
-	}
+    }
 
 }
 

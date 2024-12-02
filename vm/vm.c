@@ -344,10 +344,10 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 				succ = false;
 			}
 		}
-			else{
-		
-				succ = false;
-			}
+		else{
+	
+			succ = false;
+		}
 			// vm_stack_growth(addr); // stack을 확장시킨다
 			// 아무떄나 stack growth를 하면 안될듯하다. -> 무한 루프의 주범
 		// }

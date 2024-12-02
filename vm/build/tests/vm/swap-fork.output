@@ -4,7 +4,7 @@ Kernel command line: -q -f put swap-fork put child-swap run swap-fork
 Pintos booting with: 
 	base_mem: 0x0 ~ 0x9fc00 (Usable: 639 kB)
 	ext_mem: 0x100000 ~ 0x27e0000 (Usable: 39,808 kB)
-Calibrating timer...  132,505,600 loops/s.
+Calibrating timer...  116,940,800 loops/s.
 hd0:0: detected 353 sector (176 kB) disk, model "QEMU HARDDISK", serial "QM00001"
 hd0:1: detected 20,160 sector (9 MB) disk, model "QEMU HARDDISK", serial "QM00002"
 hd1:0: detected 4,119 sector (2 MB) disk, model "QEMU HARDDISK", serial "QM00003"
@@ -38,8 +38,8 @@ child-swap: exit(0)
 (swap-fork) end
 swap-fork: exit(0)
 Execution of 'swap-fork' complete.
-Timer: 310 ticks
-Thread: 92 idle ticks, 155 kernel ticks, 63 user ticks
+Timer: 287 ticks
+Thread: 71 idle ticks, 157 kernel ticks, 59 user ticks
 hd0:0: 0 reads, 0 writes
 hd0:1: 575 reads, 8276 writes
 hd1:0: 4119 reads, 0 writes

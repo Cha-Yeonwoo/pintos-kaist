@@ -20,27 +20,34 @@ Executing 'page-merge-stk':
 (page-merge-stk) sort chunk 1
 (page-merge-stk) sort chunk 2
 (page-merge-stk) sort chunk 3
-(page-merge-stk) sort chunk 4
-(page-merge-stk) sort chunk 5
 load: child-qsort: open failed
 child-qsort: exit(-1)
+(page-merge-stk) sort chunk 4
+(page-merge-stk) sort chunk 5
 (page-merge-stk) sort chunk 6
 (page-merge-stk) sort chunk 7
 (page-merge-stk) wait for child 0
-(child-qsort) open "buf0": FAILED
+(child-qsort) open "buf3": FAILED
 child-qsort: exit(1)
+child-qsort: exit(72)
+child-qsort: exit(72)
+child-qsort: exit(72)
 (child-qsort) open "buf6": FAILED
 child-qsort: exit(1)
-(page-merge-stk) wait for child 0: FAILED
+child-qsort: exit(72)
+(page-merge-stk) wait for child 1
+child-qsort: exit(72)
+(page-merge-stk) wait for child 2
+(page-merge-stk) wait for child 2: FAILED
 page-merge-stk: exit(1)
 Execution of 'page-merge-stk' complete.
-Timer: 259 ticks
-Thread: 70 idle ticks, 60 kernel ticks, 129 user ticks
+Timer: 305 ticks
+Thread: 90 idle ticks, 62 kernel ticks, 153 user ticks
 hd0:0: 0 reads, 0 writes
-hd0:1: 1450 reads, 4678 writes
+hd0:1: 2486 reads, 5958 writes
 hd1:0: 224 reads, 0 writes
 hd1:1: 0 reads, 0 writes
-Console: 1537 characters output
+Console: 1715 characters output
 Keyboard: 0 keys pressed
 Exception: 0 page faults
 Powering off...
