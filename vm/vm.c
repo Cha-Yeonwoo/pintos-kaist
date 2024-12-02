@@ -102,29 +102,29 @@ err:
 /* Find VA from spt and return page. On error, return NULL. */
 struct page *
 spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
-	struct page *page = NULL;
+	//struct page *page = NULL;
 	/* TODO: Fill this function. */
-	page = (struct page *) malloc (sizeof (struct page));
-	struct page *page_start;
+	//page = (struct page *) malloc (sizeof (struct page));
+	struct page page_start;
 	// 주어진 va를 이용해서 page를 찾아야한다
-	page_start->va = pg_round_down(va);
+	page_start.va = pg_round_down(va);
 	// page_start->page_thread = thread_current();
 
 	// 현재 thread에서 찾아오는게 맞다... 
 	// 그치만 이미 vm_alloc_page_with_initializer에서 thread_current()로 호출하고 있음
-	if (&page_start->hash_elem == NULL){
-		// page가 없으면 NULL을 반환
-		// free (page);
-		return NULL;
-	}
-	struct hash_elem *e = hash_find(&spt->pages_map, &page_start->hash_elem); // spt에서 page를 찾아온다
+	// if (&page_start->hash_elem == NULL){
+	// 	// page가 없으면 NULL을 반환
+	// 	// free (page);
+	// 	return NULL;
+	// }
+	struct hash_elem *e = hash_find(&spt->pages_map, &page_start.hash_elem); // spt에서 page를 찾아온다
 
 
 	if (e==NULL){
 		// free (page);
 		return NULL; // page가 없으면 NULL을 반환
 	}
-	page = hash_entry(e, struct page, hash_elem);
+	struct page *page = hash_entry(e, struct page, hash_elem);
 
 	return page;
 }
@@ -218,25 +218,15 @@ vm_evict_frame (void) {
  * space.*/
 static struct frame *
 vm_get_frame (void) {
-	struct frame *frame = NULL; 
-	/* TODO: Fill this function. */
-	frame = (struct frame *) malloc (sizeof (struct frame));
-	if (frame == NULL) return NULL;
-
-	frame->kva = palloc_get_page(PAL_USER);
-	
-	if (frame->kva == NULL){ // palloc_get_page가 실패했을 때
-		frame = vm_evict_frame(); // evict frame을 호출해서 frame을 얻어온다
-		frame->page = NULL; // 일단 assertion 에러 안나게 하려고 넣은거
+	void *paddr = palloc_get_page(PAL_USER);
+	if (paddr == NULL) { // user pool이 꽉 차 있는 경우. 이 경우에는 하나를 evict한다. 
+		return vm_evict_frame(); 
 	}
-	else{
-		frame->page = NULL; // 일단 assertion 에러 안나게 하려고 넣은거
-		list_push_back(&frame_table, &frame->elem);	
-	}
-
-	ASSERT (frame != NULL);
-	ASSERT (frame->page == NULL);
-	
+	// user pool이 꽉 차 있지 않으면, 새로운 frame을 생성. 
+	struct frame *frame = (struct frame *) malloc (sizeof (struct frame));
+	if (frame == NULL) { return NULL; }
+	frame->kva = paddr;
+	list_push_back(&frame_table, &frame->elem);
 	return frame;
 }
 
