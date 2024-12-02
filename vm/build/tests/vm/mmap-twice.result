@@ -1,2 +1,1 @@
-FAIL
-run: compare mmap'd file 0 against data: FAILED
+PASS

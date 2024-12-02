@@ -67,6 +67,7 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 		 * TODO: should modify the field after calling the uninit_new. */
 		
 		struct page *new_page = (struct page *) malloc (sizeof (struct page));
+		new_page->page_thread = thread_current();
 		if (new_page == NULL) return false;
 
 		// 서로다른 initializer를 사용하여 new_page를 초기화
@@ -107,10 +108,17 @@ spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
 	struct page *page_start;
 	// 주어진 va를 이용해서 page를 찾아야한다
 	page_start->va = pg_round_down(va);
+	// page_start->page_thread = thread_current();
 
 	// 현재 thread에서 찾아오는게 맞다... 
 	// 그치만 이미 vm_alloc_page_with_initializer에서 thread_current()로 호출하고 있음
-	struct hash_elem *e = hash_find(&(spt->pages_map), &(page_start->hash_elem)); // spt에서 page를 찾아온다
+	if (&page_start->hash_elem == NULL){
+		// page가 없으면 NULL을 반환
+		// free (page);
+		return NULL;
+	}
+	struct hash_elem *e = hash_find(&spt->pages_map, &page_start->hash_elem); // spt에서 page를 찾아온다
+
 
 	if (e==NULL){
 		// free (page);
@@ -160,9 +168,30 @@ vm_get_victim (void) {
 
 	 
 	 struct list_elem *frame;
-	 victim = list_entry(list_begin(&frame_table), struct frame, elem);
+	//  victim = list_entry(list_begin(&frame_table), struct frame, elem);
 	// 일단 무지성으로 맨앞에꺼 꺼내오는중.. 
 	// TODO: instruction 다시 읽고 어떤 frame을 evict할지 구현
+
+	// LRU를 구현해보자
+	// frame_table을 돌면서 최근에 사용되지 않은 frame을 찾아서 반환한다
+	for (frame = list_begin(&frame_table); frame != list_end(&frame_table); frame = list_next(frame)){
+		victim = list_entry(frame, struct frame, elem);
+		if (pml4_is_accessed(victim->page->page_thread->pml4, victim->page->va)){
+			pml4_set_accessed(victim->page->page_thread->pml4, victim->page->va, false);
+		}
+		else{
+			break;
+		}
+	}
+	if (frame == list_end(&frame_table)){
+		// 모든 frame이 최근에 사용되었으면 맨 앞에 frame을 반환
+		// 사실 뭘 하든 똑같음.
+		victim = list_entry(list_begin(&frame_table), struct frame, elem);
+	}
+
+
+
+
 	return victim;
 
 }
@@ -229,21 +258,41 @@ vm_stack_growth (void *addr UNUSED) {
 	// if (!vm_alloc_page(VM_ANON | VM_MARKER_1, adjusted_addr, true)) {
 	// 	return;
 	// }
+	// bad ptr인지 확인해야함
+
+	// if (is_kernel_vaddr(adjusted_addr)) {
+	// 	// 바로 에러
+	// 	thread_current()->exit_status = -1;
+	// 	thread_exit();
+	// 	return;
+	// }
 
 
 	// if (!vm_claim_page(adjusted_addr)) {
-	// 	return;
+	// 	return; 
 	// }
+	int stack_size = (1<<5);
+
 	while (adjusted_addr < USER_STACK && adjusted_addr >= (USER_STACK - STACK_SIZE)) {
-		if (!vm_alloc_page(VM_ANON | VM_MARKER_1, adjusted_addr, true)) {
+		if (!vm_alloc_page(VM_ANON | stack_size, adjusted_addr, true)) {
 			return; // page 생성 실패
 		}
+
 		if (!vm_claim_page(adjusted_addr)) {
 			// printf("DEBUG: Failed to claim page for address %p\n", adjusted_addr);
 			return; // claim page 실패
 		}
 		adjusted_addr += PGSIZE;
+		// asm volatile("movq %0, %%rsp" : : "r" (adjusted_addr));
 	}
+
+	// 간단하게 생각하자. 그냥 alloc해서 할당하고 rsp 내리면 된다...
+
+	// if (vm_alloc_page(VM_ANON | VM_MARKER_1, adjusted_addr, true)) {
+	// 	vm_claim_page(adjusted_addr);
+	// 	// rsp PGSIZE만큼 내려주기
+	// 	asm volatile("movq %0, %%rsp" : : "r" (adjusted_addr - PGSIZE));
+	// }
 
 	
 }
@@ -276,13 +325,33 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	
 	// rsp 포인터를 가져와서 stack growth를 할지 말지 결정
 	void *pointer = f->rsp;
+	// f-rsp가 kernel address이면 thread_current()의 rsp를 가져와야한다.
+	// thread는 rsp를 가져야 한다...?
 
+	// if (is_kernel_vaddr(pointer)) {
+	// 	// asm volatile("movq %%rsp, %0" : "=r" (pointer)); // rsp를 pointer에 저장
+	// 	// thread에서 rsp를 가져와야함.
 
-	page = spt_find_page(spt, addr);
+	// }
+
+	page = spt_find_page(spt, addr); // d
+
+	if (!user){ 
+		pointer = thread_current()->rsp;
+	}
 	if (page == NULL) {	//스택이 가득차서 할당이 더 이상 불가능한 경우
-
-		// asm volatile("movq %%rsp, %0" : "=r" (pointer)); // rsp를 pointer에 저장
-		vm_stack_growth(addr); // stack을 확장시킨다
+		if (write){
+			if (addr>=pointer-8 && addr<=USER_STACK){ // 8인 이유는 rsp가 8바이트씩 내려가기 때문
+				// 현재 addr가 rsp 주변이면 stack growth를 한다
+				vm_stack_growth(addr);
+			}
+			else{
+		
+				succ = false;
+			}
+			// vm_stack_growth(addr); // stack을 확장시킨다
+			// 아무떄나 stack growth를 하면 안될듯하다. -> 무한 루프의 주범
+		}
 	} else {
 		if (write && page->writable == false) {
 			// 읽기 전용 페이지에 쓰려고 할 때
@@ -375,7 +444,7 @@ supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
 		//vm_alloc에서 보이다시피 vm_type, upage, writable, init, aux 정보들을 다 담아서 dst spt안에 넣어줘야한다
 		enum vm_type src_page_type = src_page->operations->type;
 
-		if (src_page_type == VM_ANON) {
+		if (src_page_type == VM_ANON ) {
 
 			if (!vm_alloc_page(src_page_type, src_page->va, src_page->writable)) return false;
 
@@ -403,6 +472,7 @@ supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
 			}
 
 		}
+	
 		else {
 			; // VM_FILE, VM_PAGE_CACHE인 경우는 일단 무시
 		}

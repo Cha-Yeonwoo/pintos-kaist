@@ -58,9 +58,11 @@ static bool
 anon_swap_in (struct page *page, void *kva) {
 	struct anon_page *anon_page = &page->anon;
 
+
 	if (!bitmap_test(swap_table, anon_page->swap_index)) {
 		return false;
 	}
+	bitmap_reset(swap_table, anon_page->swap_index); // reset the bitmap
 	size_t sector_idx = anon_page->swap_index * 8; // get the sector index
 
 	for (int i = 0; i < 8; i++) {
@@ -95,8 +97,9 @@ anon_swap_out (struct page *page) {
 	anon_page->swap_index = swap_index; // set the swap index
 
 	
-	pml4_clear_page(thread_current()->pml4, page->va); // clear the page table entry
+	// pml4_clear_page(thread_current()->pml4, page->va); // clear the page table entry
 	// pml4_set_dirty(thread_current()->pml4, page->va, false); // clear the dirty bit
+	pml4_clear_page(page->page_thread->pml4, page->va); // clear the page table entry
 
 	page->frame = NULL; // clear the frame
 

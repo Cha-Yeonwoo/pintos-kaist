@@ -50,6 +50,8 @@ struct page {
 	bool writable; // If the page is writable or not
 	struct hash_elem hash_elem; // For hash table
 
+	struct thread * page_thread; // page를 가지고 있는 thread
+
 	/* Per-type data are binded into the union.
 	 * Each function automatically detects the current union */
 	union {

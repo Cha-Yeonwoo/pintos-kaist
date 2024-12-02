@@ -969,7 +969,8 @@ lazy_load_segment (struct page *page, struct file_page *aux) { // static 지웟�
 	off_t offset = aux->ofs; 
 	size_t read_bytes = aux->read_bytes;
 	size_t page_zero_bytes = aux->zero_bytes;
-	void *buffer = page->frame->kva; 
+
+	void *buffer = page->frame->kva; // 
 
 	if (file == NULL) {
 
@@ -979,10 +980,10 @@ lazy_load_segment (struct page *page, struct file_page *aux) { // static 지웟�
 	//파일 위치를 찾기 위해
 	file_seek(file, offset);
 	
-	lock_acquire (&filesys_lock);
+	// lock_acquire (&filesys_lock);
 	//offset에 담긴 파일을 물리 프레임으로부터 읽어야함.
 	off_t read_result = file_read(file, buffer, read_bytes);
-	lock_release (&filesys_lock);
+	// lock_release (&filesys_lock);
 
 	if (read_result!= read_bytes) { 
 		// Lazy load 실패

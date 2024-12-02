@@ -298,19 +298,43 @@ int read (struct intr_frame *f) {
 		thread_exit ();
 		return -1;
 	}
+	// buffer에 쓰다가 침범하는지를 확인하기 위해 size adjust
+	if (is_kernel_vaddr (buf + size)){
+		size  -= (size_t)((buf + size) - KERN_BASE);
+	}
+
+#ifdef VM
+	if (spt_find_page(&cur->spt, (void*)buf) != NULL && spt_find_page(&cur->spt, (void*)buf)->writable == 0){ 
+		// msg("DEBUG: read page is not valid");
+		cur->exit_status = -1;
+		printf("%s: exit(%d)\n", cur->name, cur->exit_status);
+		thread_exit ();
+		return -1;
+	}
+#endif
+
 
 	ptr = pg_round_down (buf);
-	for (; ptr <= pg_round_down (buf + size); ptr += PGSIZE) {
+	for (; ptr <= pg_round_down (buf + size-1); ptr += PGSIZE) { // 등호?
+		// msg("DEBUG: read ptr = %p", ptr);
+		// 여기서 read boundary 뿐만 아니라 다른 테스크들도... 걸림
+
+	
 		uint64_t *pte = pml4e_walk (cur->pml4, (uint64_t) ptr, 0);
-		if (pte == NULL ||is_kern_pte(pte) ){
+		if (pte == NULL ){ // || is_kern_pte(pte) 
 			cur->exit_status = -1;
-			// msg("DEBUG: read pte is invalid");
+			// msg("DEBUG: read pte is invalid, %p", ptr);
 			// 몇몇 케이스들의 paraent가 여기서 걸린다...
+
+
+		
 			thread_exit ();
 			return -1;
 		}
-		
+
 	}
+		
+	// msg("DEBUG: read size = %d", size);
 
 	lock_acquire (&filesys_lock);
 	filde = find_filde_by_fd (fd);
@@ -328,6 +352,8 @@ int read (struct intr_frame *f) {
 		else{ // FILE
 			ret = file_read (filde->file, buf, size);
 			// msg("DEBUG: read from file, %d", ret);
+			// buffer에 적다가 페이지 넘어가면? 새로운 페이지 할당.
+
 		}
 	}
 	lock_release (&filesys_lock);
@@ -537,6 +563,12 @@ syscall_handler (struct intr_frame *f) {
 	// msg("DEBUG: syscall_handler. syscall number: %d", f->R.rax);
 	// f-R.rax: system call number (syscall-nr.h)
 	// f 를 thread 안에 넣는다??
+
+	// 여기에 thread의 rsp 저장해야함
+#ifdef VM
+	thread_current()->rsp = (void *) f->rsp;
+#endif
+
 	switch (f->R.rax) {
 		case SYS_HALT:
 			halt ();

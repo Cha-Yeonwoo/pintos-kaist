@@ -21,10 +21,14 @@ Executing 'page-merge-par':
 load: child-sort: open failed
 child-sort: exit(-1)
 (page-merge-par) sort chunk 2
+load: child-sort: open failed
+child-sort: exit(-1)
 (page-merge-par) sort chunk 3
 load: child-sort: open failed
 child-sort: exit(-1)
 (page-merge-par) sort chunk 4
+load: child-sort: open failed
+child-sort: exit(-1)
 (page-merge-par) sort chunk 5
 load: child-sort: open failed
 child-sort: exit(-1)
@@ -38,13 +42,13 @@ child-sort: exit(-1)
 (page-merge-par) wait for child 0: FAILED
 page-merge-par: exit(1)
 Execution of 'page-merge-par' complete.
-Timer: 225 ticks
-Thread: 62 idle ticks, 60 kernel ticks, 103 user ticks
+Timer: 217 ticks
+Thread: 51 idle ticks, 66 kernel ticks, 100 user ticks
 hd0:0: 0 reads, 0 writes
-hd0:1: 404 reads, 4666 writes
+hd0:1: 392 reads, 4666 writes
 hd1:0: 218 reads, 0 writes
 hd1:1: 0 reads, 0 writes
-Console: 1626 characters output
+Console: 1728 characters output
 Keyboard: 0 keys pressed
 Exception: 0 page faults
 Powering off...

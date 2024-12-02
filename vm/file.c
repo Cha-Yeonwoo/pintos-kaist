@@ -36,7 +36,7 @@ file_backed_initializer (struct page *page, enum vm_type type, void *kva) {
     file_page->read_bytes = 0;      // 읽을 바이트 수 초기화
     file_page->zero_bytes = PGSIZE; // 초기화 바이트 수 설정
 
-    page->frame = NULL; // 아직 물리 메모리와 연결되지 않음
+    // page->frame = NULL; // 아직 물리 메모리와 연결되지 않음
 
 	
 	return true;
@@ -176,7 +176,7 @@ do_mmap(void *addr, size_t length, int writable, struct file *file, off_t offset
         aux->read_bytes = page_read_bytes;
         aux->zero_bytes = page_zero_bytes;
 
-        if (!vm_alloc_page_with_initializer(VM_FILE, addr, writable, file_backed_initializer, aux)) {
+        if (!vm_alloc_page_with_initializer(VM_FILE, addr, writable, lazy_load_segment, aux)) {
             free(aux);
             file_close(reopen_file);
             return NULL;
@@ -210,12 +210,14 @@ do_munmap (void *addr) {
 		return;
 	}
 	
-	while (page != NULL) {
+	while (page != NULL && is_user_vaddr(page->va)) {
 		// TODO: clear and remove if necessary
 		struct file_page *file_page = &page->file;
+        // struct file_page *file_page = page->uninit.aux;
+        // 뭔가 file_page 제대로 못넘겨받는거 같은데...
 
 
-		if (pml4_is_dirty(cur->pml4, page->va)) {
+		if (pml4_is_dirty(page->page_thread->pml4, page->va)) {
             // 파일 기반 페이지인 경우
             if (page->operations->type == VM_FILE) {
                 struct file *file = file_page->file;
@@ -233,15 +235,15 @@ do_munmap (void *addr) {
                 }
             }
             // Dirty 플래그 초기화
-            pml4_set_dirty(cur->pml4, page->va, false);
+            pml4_set_dirty(page->page_thread->pml4, page->va, false);
         }
 
-		pml4_clear_page(cur->pml4, page->va);
+		pml4_clear_page(page->page_thread->pml4, page->va);
         // spt_remove_page(&cur->spt, page);
 
         // 다음 페이지로 이동
         addr += PGSIZE;
-        page = spt_find_page(&cur->spt, addr); 
+        page = spt_find_page(&page->page_thread->spt, addr); 
 
 
 	}

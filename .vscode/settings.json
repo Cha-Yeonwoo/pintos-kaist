@@ -12,6 +12,10 @@
         "file.h": "c",
         "inode.h": "c",
         "list.h": "c",
-        "loader.h": "c"
+        "loader.h": "c",
+        "iosfwd": "c",
+        "istream": "c",
+        "limits": "c",
+        "streambuf": "c"
     }
 }

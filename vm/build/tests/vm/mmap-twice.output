@@ -20,16 +20,17 @@ Executing 'mmap-twice':
 (mmap-twice) open "sample.txt" #1
 (mmap-twice) mmap "sample.txt" #1 at 0x20000000
 (mmap-twice) compare mmap'd file 0 against data
-(mmap-twice) compare mmap'd file 0 against data: FAILED
-mmap-twice: exit(1)
+(mmap-twice) compare mmap'd file 1 against data
+(mmap-twice) end
+mmap-twice: exit(0)
 Execution of 'mmap-twice' complete.
-Timer: 86 ticks
-Thread: 34 idle ticks, 49 kernel ticks, 3 user ticks
+Timer: 85 ticks
+Thread: 34 idle ticks, 48 kernel ticks, 3 user ticks
 hd0:0: 0 reads, 0 writes
-hd0:1: 124 reads, 256 writes
+hd0:1: 128 reads, 256 writes
 hd1:0: 109 reads, 0 writes
 hd1:1: 0 reads, 0 writes
-Console: 1267 characters output
+Console: 1276 characters output
 Keyboard: 0 keys pressed
 Exception: 0 page faults
 Powering off...
