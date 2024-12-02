@@ -62,9 +62,9 @@ pass tests/userprog/bad-write2
 pass tests/userprog/bad-jump
 pass tests/userprog/bad-jump2
 pass tests/vm/pt-grow-stack
-FAIL tests/vm/pt-grow-bad
+pass tests/vm/pt-grow-bad
 pass tests/vm/pt-big-stk-obj
-FAIL tests/vm/pt-bad-addr
+pass tests/vm/pt-bad-addr
 FAIL tests/vm/pt-bad-read
 pass tests/vm/pt-write-code
 FAIL tests/vm/pt-write-code2
@@ -94,7 +94,7 @@ pass tests/vm/mmap-over-code
 pass tests/vm/mmap-over-data
 pass tests/vm/mmap-over-stk
 FAIL tests/vm/mmap-remove
-FAIL tests/vm/mmap-zero
+pass tests/vm/mmap-zero
 pass tests/vm/mmap-bad-fd2
 pass tests/vm/mmap-bad-fd3
 pass tests/vm/mmap-zero-len

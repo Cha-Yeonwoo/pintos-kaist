@@ -4,7 +4,7 @@ Kernel command line: -q -f put mmap-zero run mmap-zero
 Pintos booting with: 
 	base_mem: 0x0 ~ 0x9fc00 (Usable: 639 kB)
 	ext_mem: 0x100000 ~ 0x13e0000 (Usable: 19,328 kB)
-Calibrating timer...  157,081,600 loops/s.
+Calibrating timer...  145,612,800 loops/s.
 hd0:0: detected 353 sector (176 kB) disk, model "QEMU HARDDISK", serial "QM00001"
 hd0:1: detected 20,160 sector (9 MB) disk, model "QEMU HARDDISK", serial "QM00002"
 hd1:0: detected 103 sector (51 kB) disk, model "QEMU HARDDISK", serial "QM00003"
@@ -17,30 +17,15 @@ Executing 'mmap-zero':
 (mmap-zero) create empty file "empty"
 (mmap-zero) open "empty"
 (mmap-zero) mmap "empty"
-Page fault at 0x10: not present error writing page in kernel context.
-Interrupt 0x0e (#PF Page-Fault Exception) at rip=80042230f7
- cr2=0000000000000010 error=               2
-rax 0000000000000008 rbx 000000004747ff80 rcx 0000000000000000 rdx 000000007f000000
-rsp 0000008004245e30 rbp 0000008004245e60 rsi 0000008004245060 rdi 0000000000000001
-rip 00000080042230f7 r8 0000000000000001  r9 0000000000000000 r10 0000000000000002
-r11 0000000000000202 r12 00008004245f0000 r13 0000000000000200 r14 00008004245f0000
-r15 0000800422bb0000 rflags 00000206
-es: 0010 ds: 0010 cs: 0008 ss: 0010
-Kernel PANIC at ../../userprog/exception.c:97 in kill(): Kernel bug - unexpected interrupt in kernel
-Call stack: 0x8004218cff 0x800421e1b2 0x800421e3af 0x80042098c7 0x8004209ce5 0x8004223607 0x800421e2d1 0x80042098c7 0x8004209ce5 0x400cc2 0x400d0b 0Interrupt 0x0d (#GP General Protection Exception) at rip=8004215d39
- cr2=0000000000000010 error=               0
-rax 00008004208a3a00 rbx 000000004747ff80 rcx 00000080040b8000 rdx 00000000000003d4
-rsp 0000008004245c20 rbp 0000008004245c30 rsi 000000000000c40f rdi 0000000000000000
-rip 0000008004215d39 r8 0000008004245b38  r9 000000800421c178 r10 0000000000000002
-r11 0000000000000202 r12 00008004245f0000 r13 0000000000000200 r14 00008004245f0000
-r15 0000800422bb0000 rflags 00000006
-es: 0010 ds: 0010 cs: 0008 ss: 0010
-Kernel PANIC recursion at ../../userprog/exception.c:97 in kill().
-Timer: 4002 ticks
-Thread: 31 idle ticks, 51 kernel ticks, 3920 user ticks
+mmap-zero: exit(-1)
+Execution of 'mmap-zero' complete.
+Timer: 84 ticks
+Thread: 32 idle ticks, 50 kernel ticks, 2 user ticks
 hd0:0: 0 reads, 0 writes
 hd0:1: 106 reads, 246 writes
 hd1:0: 103 reads, 0 writes
 hd1:1: 0 reads, 0 writes
-Console: 2391 characters output
-Key
+Console: 1021 characters output
+Keyboard: 0 keys pressed
+Exception: 0 page faults
+Powering off...

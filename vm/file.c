@@ -204,7 +204,7 @@ do_munmap (void *addr) {
 	}
 
 	struct page *page = spt_find_page(&thread_current()->spt, addr);
-	struct thread *cur = thread_current();
+	// struct thread *cur = thread_current();
 
 	if (page == NULL) {
 		return;
@@ -212,7 +212,7 @@ do_munmap (void *addr) {
 	
 	while (page != NULL && is_user_vaddr(page->va)) {
 		// TODO: clear and remove if necessary
-		struct file_page *file_page = &page->file;
+		struct file_page *file_page = &page->file; // 
         // struct file_page *file_page = page->uninit.aux;
         // 뭔가 file_page 제대로 못넘겨받는거 같은데...
 

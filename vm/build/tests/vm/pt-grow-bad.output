@@ -14,4 +14,15 @@ Boot complete.
 Putting 'pt-grow-bad' into the file system...
 Executing 'pt-grow-bad':
 (pt-grow-bad) begin
-TIMEOUT
+pt-grow-bad: exit(-1)
+Execution of 'pt-grow-bad' complete.
+Timer: 83 ticks
+Thread: 32 idle ticks, 50 kernel ticks, 1 user ticks
+hd0:0: 0 reads, 0 writes
+hd0:1: 80 reads, 232 writes
+hd1:0: 102 reads, 0 writes
+hd1:1: 0 reads, 0 writes
+Console: 946 characters output
+Keyboard: 0 keys pressed
+Exception: 0 page faults
+Powering off...

@@ -99,6 +99,7 @@ static bool is_bad_name (void *p) {
 		}
 		
 	}
+	return false;
 }
 
  // allocate file descriptor to the file
@@ -687,16 +688,16 @@ void *mmap(void *addr, size_t length, bool writable, int fd, off_t offset){
 
 
 void munmap(void *addr){
-	struct thread *cur = thread_current();
+	// struct thread *cur = thread_current();
 
-	if (addr == NULL) {
-		return;
-	}
+	// if (addr == NULL) {
+	// 	return;
+	// }
 
-	if (!spt_find_page(&cur->spt, addr)) {
-		// not mapped
-		return;
-	}
+	// if (!spt_find_page(&cur->spt, addr)) {
+	// 	// not mapped
+	// 	return;
+	// }
 	do_munmap(addr);
 
 }
