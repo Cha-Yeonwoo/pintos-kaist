@@ -149,9 +149,11 @@ spt_insert_page (struct supplemental_page_table *spt UNUSED,
 
 void
 spt_remove_page (struct supplemental_page_table *spt, struct page *page) {
+	//msg("Removing page");
 	hash_delete (&spt->pages_map, &page->hash_elem);
-
+	//msg("Hash deleted");
 	vm_dealloc_page (page);
+	//msg("Dealloc finished");
 }
 
 /* Get the struct frame, that will be evicted. */
@@ -265,7 +267,7 @@ vm_stack_growth (void *addr UNUSED) {
 
 
 	while (adjusted_addr < USER_STACK && adjusted_addr >= (USER_STACK - STACK_SIZE)) {
-		if (!vm_alloc_page(VM_ANON | STACK_SIZE, adjusted_addr, true)) {
+		if (!vm_alloc_page(VM_ANON, adjusted_addr, true)) {
 			return; // page 생성 실패
 		}
 
@@ -330,7 +332,7 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	}
 	if (page == NULL) {	//스택이 가득차서 할당이 더 이상 불가능한 경우
 		if (write){
-			if (addr>=pointer-8 && addr<=USER_STACK){ // 8인 이유는 rsp가 8바이트씩 내려가기 때문
+			if (addr>=pointer-8 && addr < USER_STACK){ // 8인 이유는 rsp가 8바이트씩 내려가기 때문
 				// 현재 addr가 rsp 주변이면 stack growth를 한다
 				vm_stack_growth(addr);
 			}
@@ -398,6 +400,8 @@ vm_do_claim_page (struct page *page) {
 	frame->page = page;
 	page->frame = frame;
 
+	// frame은 지금 frame table에 있다. 
+
 	/* TODO: Insert page table entry to map page's VA to frame's PA. */
 	if (frame == NULL) {
 		// msg("DEBUG: vm_get_frame failed in vm_do_claim_page");
@@ -432,6 +436,65 @@ supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
 	struct hash_iterator spt_iterator; // src의 spt를 iterate하기 위한 iterator
 
 	hash_first(&spt_iterator, &(src->pages_map));  // src의 spt의 첫번째 page부터 시작
+
+	// spt를 copy해주자. 
+	// 어떻게 해야 하냐면, 일단 spt는 va를 page로 mapping한다. 
+	// hash table을 복사를 해야 하는데, 'uninitialized page'로 복사하면 충분하다.
+
+	while (hash_next(&spt_iterator)) {
+		// 현재 page가 uninitialized page면 그대로 복사. 
+		// ... uninitialized page면, uninit_new를 실행. 
+		// 그냥 그대로 복사하면 된다.
+		struct page *page = hash_entry(hash_cur(&spt_iterator), struct page, hash_elem);
+		enum vm_type type = page->operations->type;
+		if (VM_TYPE(type) == VM_UNINIT) {
+			// uninit page인 경우에는, 모든 정보가 page->uninit 안에 들어있다. 
+			// 따라서, 새로운 page를 만든 후, 그 page의 uninit만 조작해 주면 됨.
+			if (!vm_alloc_page_with_initializer(page->uninit.type, page->va, page->writable, page->uninit.init, page->uninit.aux)) {
+				return false;
+			}
+		} else if (VM_TYPE(type) == VM_ANON) { 
+			// anon page인 경우에는, 일단 새로운 page를 만들고 claim을 통해서 initialize. 
+			if (!vm_alloc_page_with_initializer(VM_ANON, page->va, page->writable, page->uninit.init, page->uninit.aux)) {
+				return false;
+			}
+			// page->va의 virtual address를 가지는 uninitialized page가 생성되었음. 
+			// 따라서 이제 claim page.
+			if (!vm_claim_page(page->va)) {
+				return false;
+			}
+
+			// page가 만들어졌고, 이제 memory copy
+			struct page *dst_page = spt_find_page(dst, page->va);
+			memcpy(dst_page->frame->kva, page->frame->kva, PGSIZE);
+
+		} else if (VM_TYPE(type) == VM_FILE) {
+			// file page인 경우에는(mmap), 일단 새로운 page를 만들고 claim을 통해서 initialize. 
+			if (!vm_alloc_page_with_initializer(VM_FILE, page->va, page->writable, page->uninit.init, page->uninit.aux)) {
+				return false;
+			}
+			// page->va의 virtual address를 가지는 uninitialized page가 생성되었음. 
+			// 따라서 이제 claim page.
+			if (!vm_claim_page(page->va)) {
+				return false;
+			}
+
+			// page가 만들어졌고, 이제 memory copy
+			struct page *dst_page = spt_find_page(dst, page->va);
+			memcpy(dst_page->frame->kva, page->frame->kva, PGSIZE);
+		} else {
+			msg("unknown type");
+			return false;
+		}
+		
+	}
+	return true;
+
+
+
+
+
+
 
 	// while(hash_next(&spt_iterator)) {
 	// 	struct page *src_page = hash_entry(hash_cur(&spt_iterator), struct page, hash_elem);
@@ -472,26 +535,26 @@ supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
 	// 	}
 	// }
 	// 다시... 너무 복잡하게 생각했던 것 같다.
-	while (hash_next(&spt_iterator))
-	{
-		struct page *page = hash_entry(hash_cur(&spt_iterator), struct page, hash_elem);
+	// while (hash_next(&spt_iterator))
+	// {
+	// 	struct page *page = hash_entry(hash_cur(&spt_iterator), struct page, hash_elem);
 
-		if (!vm_alloc_page_with_initializer(VM_ANON, page->va, page->writable, NULL, NULL)){
-			// page를 할당하는데 실패하면 false를 반환
-			return false;
-		}
-		struct page *dst_page = spt_find_page(dst, page->va); // dst에 해당 page가 있는지 확인
+	// 	if (!vm_alloc_page_with_initializer(VM_ANON, page->va, page->writable, NULL, NULL)){
+	// 		// page를 할당하는데 실패하면 false를 반환
+	// 		return false;
+	// 	}
+	// 	struct page *dst_page = spt_find_page(dst, page->va); // dst에 해당 page가 있는지 확인
 
-		if (!vm_claim_page(page->va)){
-			// page를 claim하는데 실패하면 false를 반환
-			return false;
-		}
-		if (page->frame != NULL){
-			// frame이 존재하면 frame을 복사
-			memcpy(dst_page->frame->kva, page->frame->kva, PGSIZE);
-		}
-	}
-	return true; // 여기까지 왔으면 성공적으로 copy가 된 것
+	// 	if (!vm_claim_page(page->va)){
+	// 		// page를 claim하는데 실패하면 false를 반환
+	// 		return false;
+	// 	}
+	// 	if (page->frame != NULL){
+	// 		// frame이 존재하면 frame을 복사
+	// 		memcpy(dst_page->frame->kva, page->frame->kva, PGSIZE);
+	// 	}
+	// }
+	// return true; // 여기까지 왔으면 성공적으로 copy가 된 것
 	
 }
 

@@ -455,6 +455,7 @@ process_wait (tid_t child_tid) {
 /* Exit the process. This function is called by thread_exit (). */
 void
 process_exit (void) {
+	//msg("Process_exit called");
 	struct thread *curr = thread_current ();
 	/* TODO: Your code goes here.
 	 * TODO: Implement process termination message (see
@@ -531,7 +532,9 @@ process_cleanup (void) {
 	struct thread *curr = thread_current ();
 
 #ifdef VM
+	//msg("Process_cleanup called");
 	supplemental_page_table_kill (&curr->spt);
+	//msg("page table killed");
 #endif
 
 	uint64_t *pml4;

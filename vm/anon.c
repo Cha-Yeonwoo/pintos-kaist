@@ -69,7 +69,7 @@ anon_swap_in (struct page *page, void *kva) {
 	}
 
 	page->frame->kva = kva;
-	page->frame->page = page; // 필요한가?
+	//page->frame->page = page; // 필요한가?
 
 	return true;
 
@@ -98,6 +98,10 @@ anon_swap_out (struct page *page) {
 	
 	// pml4_clear_page(thread_current()->pml4, page->va); // clear the page table entry
 	// pml4_set_dirty(thread_current()->pml4, page->va, false); // clear the dirty bit
+	
+	if (page->page_thread == NULL) { 
+		msg("FATAL!!!!!");
+	}
 	pml4_clear_page(page->page_thread->pml4, page->va); // clear the page table entry
 
 	page->frame = NULL; // clear the frame
@@ -110,8 +114,8 @@ static void
 anon_destroy (struct page *page) {
 	struct anon_page *anon_page = &page->anon;
 	if (page->frame != NULL) {
-		list_remove(&page->frame->elem);
-		free(page->frame);
+		// list_remove(&page->frame->elem);
+		// free(page->frame);
 		page->frame = NULL;
 	}
 }

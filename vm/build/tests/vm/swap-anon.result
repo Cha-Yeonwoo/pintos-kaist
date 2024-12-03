@@ -1,18 +1,51 @@
 FAIL
-Kernel panic in run: PANIC at ../../userprog/exception.c:97 in kill(): Kernel bug - unexpected interrupt in kernel
-Call stack: 0x8004218cff 0x800421e1b2 0x800421e3af 0x80042098c7 0x8004209ce5 0x80042232c3 0x8004223324 0x8004223635 0x800422356c 0x800421e2d1 0x80042098c7 0x8004209ce5 0x400cac 0x400cf5
-Translation of call stack:
-0x0000008004218cff: debug_panic (lib/kernel/debug.c:32)
-0x000000800421e1b2: kill (userprog/exception.c:103)
-0x000000800421e3af: page_fault (userprog/exception.c:169 (discriminator 12))
-0x00000080042098c7: intr_handler (threads/interrupt.c:352)
-0x0000008004209ce5: intr_entry (threads/intr-stubs.o:?)
-0x00000080042232c3: vm_evict_frame (vm/vm.c:204)
-0x0000008004223324: vm_get_frame (vm/vm.c:224)
-0x0000008004223635: vm_do_claim_page (vm/vm.c:395)
-0x000000800422356c: vm_try_handle_fault (vm/vm.c:366)
-0x000000800421e2d1: page_fault (userprog/exception.c:149)
-0x00000080042098c7: intr_handler (threads/interrupt.c:352)
-0x0000008004209ce5: intr_entry (threads/intr-stubs.o:?)
-0x0000000000400cac: (unknown)
-0x0000000000400cf5: (unknown)
+Test output failed to match any acceptable form.
+
+Acceptable output:
+  (swap-anon) begin
+  (swap-anon) write sparsely over page 0
+  (swap-anon) write sparsely over page 512
+  (swap-anon) write sparsely over page 1024
+  (swap-anon) write sparsely over page 1536
+  (swap-anon) write sparsely over page 2048
+  (swap-anon) write sparsely over page 2560
+  (swap-anon) write sparsely over page 3072
+  (swap-anon) write sparsely over page 3584
+  (swap-anon) write sparsely over page 4096
+  (swap-anon) write sparsely over page 4608
+  (swap-anon) check consistency in page 0
+  (swap-anon) check consistency in page 512
+  (swap-anon) check consistency in page 1024
+  (swap-anon) check consistency in page 1536
+  (swap-anon) check consistency in page 2048
+  (swap-anon) check consistency in page 2560
+  (swap-anon) check consistency in page 3072
+  (swap-anon) check consistency in page 3584
+  (swap-anon) check consistency in page 4096
+  (swap-anon) check consistency in page 4608
+  (swap-anon) end
+Differences in `diff -u' format:
+  (swap-anon) begin
+  (swap-anon) write sparsely over page 0
+  (swap-anon) write sparsely over page 512
+  (swap-anon) write sparsely over page 1024
+- (swap-anon) write sparsely over page 1536
+- (swap-anon) write sparsely over page 2048
+- (swap-anon) write sparsely over page 2560
+- (swap-anon) write sparsely over page 3072
+- (swap-anon) write sparsely over page 3584
+- (swap-anon) write sparsely over page 4096
+- (swap-anon) write sparsely over page 4608
+- (swap-anon) check consistency in page 0
+- (swap-anon) check consistency in page 512
+- (swap-anon) check consistency in page 1024
+- (swap-anon) check consistency in page 1536
+- (swap-anon) check consistency in page 2048
+- (swap-anon) check consistency in page 2560
+- (swap-anon) check consistency in page 3072
+- (swap-anon) check consistency in page 3584
+- (swap-anon) check consistency in page 4096
+- (swap-anon) check consistency in page 4608
+- (swap-anon) end
+
+(Process exit codes are excluded for matching purposes.)

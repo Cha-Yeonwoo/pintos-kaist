@@ -152,7 +152,7 @@ page_fault (struct intr_frame *f) {
 	// 	kill (f);
 	
 #endif
-	if (user) {
+	if (1) {
 		thread_current()->exit_status = -1;
 		thread_exit();
 	}
