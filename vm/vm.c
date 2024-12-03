@@ -228,6 +228,13 @@ vm_get_frame (void) {
    if (frame == NULL) { return NULL; }
    frame->kva = paddr;
    list_push_back(&frame_table, &frame->elem);
+
+//    frame->page = NULL; //  assertion 때문에 추가했던 코드
+
+   // 원래 있었던 assertion
+//    ASSERT (frame != NULL);
+//    ASSERT (frame->page == NULL); 
+
    return frame;
 }
 
@@ -264,7 +271,8 @@ vm_stack_growth (void *addr UNUSED) {
 	// }
 
 
-	while (adjusted_addr < USER_STACK && adjusted_addr >= (USER_STACK - STACK_SIZE)) {
+	// while (adjusted_addr < USER_STACK && adjusted_addr >= (USER_STACK - STACK_SIZE)) {
+	while (true) {
 		if (!vm_alloc_page(VM_ANON | STACK_SIZE, adjusted_addr, true)) {
 			return; // page 생성 실패
 		}
@@ -306,6 +314,10 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 
 	// bad addr
 	if (addr == NULL) {
+		return false;
+	}
+
+	if (is_kernel_vaddr(addr)) {
 		return false;
 	}
 	if (is_kernel_vaddr(addr) && user || !not_present) {

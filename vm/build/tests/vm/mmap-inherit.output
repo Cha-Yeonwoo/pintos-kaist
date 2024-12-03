@@ -26,7 +26,7 @@ child-inherit: exit(-1)
 mmap-inherit: exit(0)
 Execution of 'mmap-inherit' complete.
 Timer: 88 ticks
-Thread: 33 idle ticks, 51 kernel ticks, 4 user ticks
+Thread: 35 idle ticks, 48 kernel ticks, 5 user ticks
 hd0:0: 0 reads, 0 writes
 hd0:1: 209 reads, 478 writes
 hd1:0: 215 reads, 0 writes

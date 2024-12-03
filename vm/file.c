@@ -45,9 +45,9 @@ file_backed_initializer (struct page *page, enum vm_type type, void *kva) {
 /* Swap in the page by read contents from the file. */
 static bool
 file_backed_swap_in (struct page *page, void *kva) {
-	// struct file_page *file_page UNUSED = &page->file;
+	struct file_page *file_page UNUSED = &page->file;
 	
-	struct file_page *file_page = (struct file_page *) &page->file;
+	// struct file_page *file_page = (struct file_page *) &page->file;
 
 	 if (page == NULL || kva == NULL || page->operations->type != VM_FILE) {
         return false;
@@ -55,10 +55,11 @@ file_backed_swap_in (struct page *page, void *kva) {
 
     struct file_page *aux = (struct file_page *) page->uninit.aux; // uninit.aux에는 file_page가 들어있음?
     
-    file_seek(aux->file, aux->ofs);
-    if (file_read(aux->file, kva, aux->read_bytes) != (int)aux->read_bytes) {
+    if (file_read_at(aux->file, kva, aux->read_bytes, aux->ofs) != (int)aux->read_bytes) {
         return false;
     }
+
+
     memset(kva + aux->read_bytes, 0, aux->zero_bytes); // zero_bytes만큼 0으로 초기화
 
    
@@ -182,12 +183,8 @@ do_munmap (void *addr) {
 		return;
 	}
 
-	struct page *page = spt_find_page(&thread_current()->spt, addr);
+	// struct page *page = spt_find_page(&thread_current()->spt, addr);
 	struct thread *cur = thread_current();
-
-	if (page == NULL) {
-		return;
-	}
 	
 	// while (page != NULL && is_user_vaddr(page->va)) {
 	// 	// TODO: clear and remove if necessary
@@ -245,7 +242,7 @@ do_munmap (void *addr) {
 
         pml4_clear_page(cur->pml4, page->va);
         spt_remove_page(&cur->spt, page); // 이게 필요했구나..?
-        addr += PGSIZE;ㄴ
+        addr += PGSIZE;
     }
 
 }

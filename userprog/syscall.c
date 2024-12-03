@@ -304,11 +304,34 @@ int read (struct intr_frame *f) {
 		size  -= (size_t)((buf + size) - KERN_BASE);
 	}
 
+	// 어떤 이유에서인지 invalid한 buffer가 감지되지 못하고 있음. (pt-bad-read)
+	// 주소가 mapping되어있지 않은 경우를 확인해야함.
+
+
 #ifdef VM
-	if (spt_find_page(&cur->spt, (void*)buf) != NULL && spt_find_page(&cur->spt, (void*)buf)->writable == 0){ 
+	// if (spt_find_page(&cur->spt, (void*)buf) != NULL && spt_find_page(&cur->spt, (void*)buf)->writable == 0){ 
+	// 	// msg("DEBUG: read page is not valid");
+	// 	cur->exit_status = -1;
+	// 	printf("%s: exit(%d)\n", cur->name, cur->exit_status);
+	// 	thread_exit ();
+	// 	return -1;
+	// }
+
+	// spt_find_page로 buf 주소가 mapping되어있지 않은 경우를 확인
+	if (spt_find_page(&cur->spt, (void*)buf) == NULL){ 
 		// msg("DEBUG: read page is not valid");
 		cur->exit_status = -1;
-		printf("%s: exit(%d)\n", cur->name, cur->exit_status);
+		// printf("%s: exit(%d)\n", cur->name, cur->exit_status);
+		// 메시지 두번뜨는건 이거 때문이엿음. 이미 thread_exit에서 출력이 일어나기 때문.
+		thread_exit ();
+		return -1;
+	}
+
+	// 이건 mapping은 되어있는데, writable이 아닌 경우
+	if (spt_find_page(&cur->spt, (void*)buf) != NULL && spt_find_page(&cur->spt, (void*)buf)->writable == 0){ 
+	// msg("DEBUG: read page is not valid");
+		cur->exit_status = -1;
+	// printf("%s: exit(%d)\n", cur->name, cur->exit_status);
 		thread_exit ();
 		return -1;
 	}
@@ -699,5 +722,6 @@ void munmap(void *addr){
 	// 	return;
 	// }
 	do_munmap(addr);
-
 }
+
+

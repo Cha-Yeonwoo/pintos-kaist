@@ -65,9 +65,9 @@ pass tests/vm/pt-grow-stack
 pass tests/vm/pt-grow-bad
 pass tests/vm/pt-big-stk-obj
 pass tests/vm/pt-bad-addr
-FAIL tests/vm/pt-bad-read
+pass tests/vm/pt-bad-read
 pass tests/vm/pt-write-code
-FAIL tests/vm/pt-write-code2
+pass tests/vm/pt-write-code2
 pass tests/vm/pt-grow-stk-sc
 pass tests/vm/page-linear
 pass tests/vm/page-parallel

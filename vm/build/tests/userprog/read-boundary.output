@@ -20,7 +20,7 @@ Executing 'read-boundary':
 read-boundary: exit(0)
 Execution of 'read-boundary' complete.
 Timer: 85 ticks
-Thread: 36 idle ticks, 46 kernel ticks, 3 user ticks
+Thread: 33 idle ticks, 50 kernel ticks, 2 user ticks
 hd0:0: 0 reads, 0 writes
 hd0:1: 121 reads, 256 writes
 hd1:0: 109 reads, 0 writes
