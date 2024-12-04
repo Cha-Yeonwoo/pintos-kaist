@@ -371,10 +371,17 @@ int write (struct intr_frame *f) {
 	int ret = -1;
 	struct thread *cur = thread_current ();
 
+	// if (fd != 1) {
+	// 	msg("write called. fd value is %d", fd);
+	// }
+
 	void *ptr;
 	// check the buffer is valid
 	if (buf == NULL || !is_user_vaddr (buf)){
 		cur->exit_status = -1;
+		// if (fd != 1) {
+		// 	msg("write exit 0");
+		// }
 		thread_exit ();
 		return -1;
 	}
@@ -384,12 +391,22 @@ int write (struct intr_frame *f) {
 	for (; ptr <= pg_round_down (buf + size); ptr += PGSIZE) {
 		uint64_t *pte = pml4e_walk (cur->pml4, (uint64_t) ptr, 0);
 		// check the page is valid
-		if (pte == NULL ||is_kern_pte(pte)|| !is_writable (pte)){
+		if (pte == NULL ||is_kern_pte(pte)){
+			// if (fd != 1) {
+			// 	if (pte == NULL){
+			// 		msg("write exit 1");
+			// 	} else if (is_kern_pte(pte)) {
+			// 		msg("write exit 2");
+			// 	}
+			// }
 			cur->exit_status = -1;
 			thread_exit ();
 			return -1; // 걸쳐있으면 바로 종료
 		}
 	}
+	// if (fd != 1) {
+	// 	msg("write called another. fd value is %d", fd);
+	// }
 
 	lock_acquire (&filesys_lock);
 	filde = find_filde_by_fd (fd);
@@ -412,6 +429,9 @@ int write (struct intr_frame *f) {
 	}
 	// filde is NULL -> error
 	lock_release (&filesys_lock);
+	// if (fd != 1) {
+	// 	msg("write finished. return value is %d", ret);
+	// }
 	return ret;
 }
 
@@ -670,7 +690,16 @@ void *mmap(void *addr, size_t length, bool writable, int fd, off_t offset){
 	if (filde == NULL || filde->file == NULL) {
 		return NULL;
 	}
+
 	file = file_reopen(filde->file);
+
+	if (file_length(file) == 0) {
+		return NULL;
+	}
+
+	if (file_length(file) <= offset) {
+		return NULL;
+	}
 
 	if (file == NULL) {
 		// reopen 실패
@@ -688,6 +717,7 @@ void *mmap(void *addr, size_t length, bool writable, int fd, off_t offset){
 
 
 void munmap(void *addr){
+	//msg("unmap called!!!!!!");
 	// struct thread *cur = thread_current();
 
 	// if (addr == NULL) {
@@ -698,6 +728,6 @@ void munmap(void *addr){
 	// 	// not mapped
 	// 	return;
 	// }
-	do_munmap(addr);
+	do_munmap(addr, true);
 
 }

@@ -380,7 +380,9 @@ bool
 vm_claim_page (void *va UNUSED) {
 	struct page *page = NULL;
 	/* TODO: Fill this function */
+	//msg("F1");
 	page = spt_find_page(&thread_current()->spt, va);
+	//msg("F2");
 	if (page != NULL) {
 		// msg("DEBUG: vm_claim_page %p", page);
 		return vm_do_claim_page (page);
@@ -394,6 +396,7 @@ vm_claim_page (void *va UNUSED) {
 /* Claim the PAGE and set up the mmu. */
 static bool
 vm_do_claim_page (struct page *page) {
+	//msg("F3");
 	struct frame *frame = vm_get_frame ();
 
 	/* Set links */
@@ -407,11 +410,13 @@ vm_do_claim_page (struct page *page) {
 		// msg("DEBUG: vm_get_frame failed in vm_do_claim_page");
 		return false;
 	}
+	//msg("F4");
 	
 	// 위에서 갖고온 frame을 page table에 넣어 업데이트
 	// swap in이 가능한 경우?  page가 swap in이 가능한 경우에만 
 
 	if (pml4_set_page (thread_current()->pml4, page->va, frame->kva, page->writable)) { 	
+		//msg("F5");
 			return swap_in(page, frame->kva);
 		
 	}
@@ -442,6 +447,7 @@ supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
 	// hash table을 복사를 해야 하는데, 'uninitialized page'로 복사하면 충분하다.
 
 	while (hash_next(&spt_iterator)) {
+		//msg("IIIIII");
 		// 현재 page가 uninitialized page면 그대로 복사. 
 		// ... uninitialized page면, uninit_new를 실행. 
 		// 그냥 그대로 복사하면 된다.
@@ -469,25 +475,31 @@ supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
 			memcpy(dst_page->frame->kva, page->frame->kva, PGSIZE);
 
 		} else if (VM_TYPE(type) == VM_FILE) {
+			//msg("P1");
 			// file page인 경우에는(mmap), 일단 새로운 page를 만들고 claim을 통해서 initialize. 
 			if (!vm_alloc_page_with_initializer(VM_FILE, page->va, page->writable, page->uninit.init, page->uninit.aux)) {
 				return false;
 			}
+			//msg("P2");
 			// page->va의 virtual address를 가지는 uninitialized page가 생성되었음. 
 			// 따라서 이제 claim page.
 			if (!vm_claim_page(page->va)) {
 				return false;
 			}
+			//msg("P3");
 
 			// page가 만들어졌고, 이제 memory copy
 			struct page *dst_page = spt_find_page(dst, page->va);
+			//msg("P4");
 			memcpy(dst_page->frame->kva, page->frame->kva, PGSIZE);
+			//msg("P5");
 		} else {
 			msg("unknown type");
 			return false;
 		}
 		
 	}
+	msg("FINE");
 	return true;
 
 
@@ -563,6 +575,9 @@ void
 supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
 	/* TODO: Destroy all the supplemental_page_table hold by thread and
 	 * TODO: writeback all the modified contents to the storage. */
+	
+	
+	
 	hash_clear(&(spt->pages_map), NULL);	
 }
 

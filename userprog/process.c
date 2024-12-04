@@ -477,6 +477,7 @@ process_exit (void) {
 		}
 	}	
 	*/
+
 	while (!list_empty (&curr->fd_distinct_list)) {
 		e = list_begin (&curr->fd_distinct_list);
 		struct dfile *dfile2 = list_entry (e, struct dfile, elem);

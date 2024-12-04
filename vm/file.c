@@ -73,7 +73,6 @@ file_backed_swap_in (struct page *page, void *kva) {
     }
     memset(kva + aux->read_bytes, 0, aux->zero_bytes); // zero_bytes만큼 0으로 초기화
 
-   
     return true;
 
 }
@@ -99,6 +98,10 @@ file_backed_swap_out (struct page *page) {
         file_seek(aux->file, file_page->ofs);
         pml4_set_dirty(page->page_thread->pml4, page->va, false);
     } 
+
+    if (page->page_thread == NULL) { 
+		msg("FATAL!!!!!");
+	}
 
     pml4_clear_page(page->page_thread->pml4, page->va);
 
@@ -146,6 +149,16 @@ do_mmap(void *addr, size_t length, int writable, struct file *file, off_t offset
     // 입력값 검증
     if (addr == NULL || pg_ofs(addr) != 0 || length == 0) {
         //msg("DEBUG: Invalid address or length for mmap\n");
+        return NULL;
+    }
+
+    if (is_kernel_vaddr(addr) || is_kernel_vaddr(addr + length)) {
+        return NULL;
+    }
+
+    if (length >= KERN_BASE) { return NULL; }
+
+    if (pg_round_down(offset) != offset) {
         return NULL;
     }
 
@@ -224,12 +237,13 @@ bool lazy_load_segment_for_file (struct page *page, struct file_page *aux) {
 
 /* Do the munmap */
 void
-do_munmap (void *addr) {
+do_munmap (void *addr, bool delhash) {
     // file이 어디까지임?
 
 	// addr가 NULL인지는 이미 munmap에서 확인함...
     //msg("unmap called");
     //msg("munmap called\n");
+    //printf("do_unmap callled!!!");
 	if (addr == NULL) {
         //msg("addr is null");
         //msg("null addr \n");
@@ -237,85 +251,44 @@ do_munmap (void *addr) {
 	}
 
 	struct page *page = spt_find_page(&thread_current()->spt, addr);
+    
 	struct thread *cur = thread_current();
 
-	if (page == NULL) {
-        //msg("page is null");
-        //msg("null page\n");
-		return;
-	}
-	
-	// while (page != NULL && is_user_vaddr(page->va)) {
-	// 	// TODO: clear and remove if necessary
-	// 	struct file_page *file_page = &page->file; // 
-    //     // struct file_page *file_page = page->uninit.aux;
-    //     // 뭔가 file_page 제대로 못넘겨받는거 같은데...
+	if (page == NULL) { return; }
+    struct file *file = page->file.file;
 
-
-	// 	if (pml4_is_dirty(thread_current()->pml4, page->va)) {
-    //         // 파일 기반 페이지인 경우
-    //         if (page->operations->type == VM_FILE) {
-    //             struct file *file = file_page->file;
-    //             off_t offset = file_page->ofs;
-    //             size_t write_bytes = file_page->read_bytes;
-
-    //             // 파일에 데이터를 기록
-    //             if (file != NULL) {
-    //                 file_seek(file, offset);
-    //                 if (file_write_at(file, page->frame->kva, write_bytes, offset) != (int)write_bytes) {
-    //                     // printf("DEBUG: Failed to write dirty page to file\n");
-	// 					;
-	// 					return;
-    //                 }
-    //             }
-    //         }
-    //         // Dirty 플래그 초기화
-    //         pml4_set_dirty(thread_current()->pml4, page->va, false);
-    //     }
-
-	// 	pml4_clear_page(thread_current()->pml4, page->va);
-    //     // spt_remove_page(&cur->spt, page);
-
-    //     // 다음 페이지로 이동
-    //     addr += PGSIZE;
-    //     page = spt_find_page(&thread_current()->spt, addr); 
-
-
-	// }
-    // 다시 해보자...
-    while (is_user_vaddr(addr)) {
-        //msg("while loop in munmap\n");
+    while (1) {
         struct page *page = spt_find_page(&cur->spt, addr);
         if (page == NULL) {
-            // printf("DEBUG: Invalid address %p during munmap\n", addr);
-            //msg("breaking anomaly\n");
             break;
         }
         if (pml4_is_dirty(cur->pml4, page->va)) {
-            // 적당히 write_at으로 처리하고
-            // dirty flag를 clear해준다 (0으로)
-            //msg("pml4 dirty is true\n");
             struct file_page *file_page = &page->file;
             file_write_at(file_page->file, addr, file_page->read_bytes, file_page->ofs);
             pml4_set_dirty(cur->pml4, page->va, 0);
-        } else {
-           // msg("pml4 dirty is false\n");
         }
 
         bool is_end = page->file.is_end;
-        if (is_end) {
-            //msg("is_end is true");
-        } else {
-            //msg("is_end is false");
-        }
 
         pml4_clear_page(cur->pml4, page->va);
         //msg("clearing page finished.");
-        spt_remove_page(&cur->spt, page); // 이게 필요했구나..?
+        if (delhash) { hash_delete (&thread_current()->spt.pages_map, &page->hash_elem); } // 이게 필요했구나..? 
+        // page에 해당하는 frame이 있으면, 이것은 모두 해제 처리.
+        // destroy 수순을 밟는다. 
+        if (page->frame != NULL) {
+            palloc_free_page(page->frame->kva);
+            list_remove(&page->frame->elem);
+            free(page->frame);
+            page->frame = NULL;
+        }
+        free(page);
+
+
         //msg("removing page finished.");
         addr += PGSIZE;
         if (is_end) { 
             //msg("breaking normally\n");
+            file_close(file);
             break;
         }
     }
