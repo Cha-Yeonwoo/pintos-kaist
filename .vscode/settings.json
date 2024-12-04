@@ -16,6 +16,8 @@
         "iosfwd": "c",
         "istream": "c",
         "limits": "c",
-        "streambuf": "c"
+        "streambuf": "c",
+        "flags.h": "c",
+        "memory_resource": "c"
     }
 }

@@ -688,21 +688,25 @@ void *mmap(void *addr, size_t length, bool writable, int fd, off_t offset){
 
 	filde = find_filde_by_fd(fd);
 	if (filde == NULL || filde->file == NULL) {
+		// msg("DEBUG : file descriptor is not valid");
 		return NULL;
 	}
 
 	file = file_reopen(filde->file);
 
 	if (file_length(file) == 0) {
+		// msg("DEBUG : file length is 0");
 		return NULL;
 	}
 
 	if (file_length(file) <= offset) {
+		// msg("DEBUG : file length is smaller than offset");
 		return NULL;
 	}
 
 	if (file == NULL) {
 		// reopen 실패
+		msg("DEBUG : file reopen failed");
 		return NULL;
 	}
 	

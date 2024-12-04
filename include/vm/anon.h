@@ -7,7 +7,7 @@ enum vm_type;
 struct anon_page {
     struct file_page *file_page;
     // struct swap_slot *swap_slot;
-    size_t swap_index;
+    int swap_index;
 };
 
 void vm_anon_init (void);

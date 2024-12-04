@@ -5,7 +5,7 @@
 #include "bitmap.h"
 #include "threads/synch.h"
 
-struct lock swap_lock; // lock for swap table
+// struct lock swap_lock; // lock for swap table
 
 /* DO NOT MODIFY BELOW LINE */
 static struct disk *swap_disk;
@@ -48,7 +48,7 @@ anon_initializer (struct page *page, enum vm_type type, void *kva) {
 
 	struct anon_page *anon_page = &page->anon;
 
-	anon_page->swap_index = -1; // initialize the swap index. 0 아니구 -1로 초기화
+	anon_page->swap_index = 0; 
 
 	return true;
 }
@@ -61,13 +61,14 @@ anon_swap_in (struct page *page, void *kva) {
 	if (!bitmap_test(swap_table, anon_page->swap_index)) {
 		return false;
 	}
-	bitmap_reset(swap_table, anon_page->swap_index); // reset the bitmap
+	// bitmap_reset(swap_table, anon_page->swap_index); // reset the bitmap
 	size_t sector_idx = anon_page->swap_index * 8;   // get the sector index
 
 	for (int i = 0; i < 8; i++) {
-		disk_read(swap_disk, sector_idx + i, kva + i * DISK_SECTOR_SIZE); // read the contents from the swap disk
+		disk_read(swap_disk, sector_idx + i, page->frame->kva + i * DISK_SECTOR_SIZE); // read the contents from the swap disk
 	}
-
+	bitmap_reset(swap_table, anon_page->swap_index); // reset the bitmap
+	// anon_page->swap_index = 0; // reset the swap index
 	page->frame->kva = kva;
 	//page->frame->page = page; // 필요한가?
 
@@ -103,6 +104,9 @@ anon_swap_out (struct page *page) {
 		msg("FATAL!!!!!");
 	}
 	pml4_clear_page(page->page_thread->pml4, page->va); // clear the page table entry
+	pml4_set_dirty(page->page_thread->pml4, page->va, false); // clear the dirty bit
+
+	anon_page->swap_index = swap_index; // set the swap index
 
 	page->frame = NULL; // clear the frame
 
@@ -113,6 +117,9 @@ anon_swap_out (struct page *page) {
 static void
 anon_destroy (struct page *page) {
 	struct anon_page *anon_page = &page->anon;
+	if(anon_page->swap_index != 0) {
+		bitmap_reset(swap_table, anon_page->swap_index); // reset the bitmap
+	}
 	if (page->frame != NULL) {
 		// list_remove(&page->frame->elem);
 		// free(page->frame);

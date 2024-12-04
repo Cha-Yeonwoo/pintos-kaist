@@ -57,21 +57,33 @@ file_backed_initializer (struct page *page, enum vm_type type, void *kva) {
 /* Swap in the page by read contents from the file. */
 static bool
 file_backed_swap_in (struct page *page, void *kva) {
-	// struct file_page *file_page UNUSED = &page->file;
+	struct file_page *file_page UNUSED = &page->file;
 	
-	struct file_page *file_page = (struct file_page *) &page->file;
+	// struct file_page *file_page = (struct file_page *) &page->file;
 
 	 if (page == NULL || kva == NULL || page->operations->type != VM_FILE) {
         return false;
     }
 
-    struct file_page *aux = (struct file_page *) &page->file; // uninit.aux에는 file_page가 들어있음?
+    // struct file_page *aux = (struct file_page *) &page->file;
+    // 그냥 넘겨주는게 아니라, 복사해서 file_read_at을 해야한다.
     
-    //file_seek(aux->file, aux->ofs);
-    if (file_read_at(aux->file, kva, aux->read_bytes, aux->ofs) != (int)aux->read_bytes) {
+    struct file_page *aux = (struct file_page *) page->uninit.aux;
+
+    aux->file = file_page->file;
+    aux->ofs = file_page->ofs;
+    aux->read_bytes = file_page->read_bytes;
+    aux->zero_bytes = file_page->zero_bytes;
+    aux->is_end = file_page->is_end;
+
+    if (lazy_load_segment_for_file(page, aux) == false) {
         return false;
     }
-    memset(kva + aux->read_bytes, 0, aux->zero_bytes); // zero_bytes만큼 0으로 초기화
+    // //file_seek(aux->file, aux->ofs);
+    // if (file_read_at(aux->file, kva, aux->read_bytes, aux->ofs) != (int)aux->read_bytes) {
+    //     return false;
+    // }
+    // memset(kva + aux->read_bytes, 0, aux->zero_bytes); // zero_bytes만큼 0으로 초기화
 
     return true;
 
@@ -81,8 +93,10 @@ file_backed_swap_in (struct page *page, void *kva) {
 static bool
 file_backed_swap_out (struct page *page) {
 	// struct file_page *file_page UNUSED = &page->file;
+    // msg("DEBUG: Swap out page at %p", page->va);
 
 	if (page == NULL || page->operations->type != VM_FILE) {
+        // msg("DEBUG: Failed check in file_backed_swap_out. %p", page->va);
 		return false;
 	}
 
@@ -106,6 +120,9 @@ file_backed_swap_out (struct page *page) {
     pml4_clear_page(page->page_thread->pml4, page->va);
 
     page->frame = NULL; // clear the frame
+
+    // Debug 
+    // msg("DEBUG: Swap out page at %p", page->va);
 
 	return true;
 }
@@ -131,13 +148,14 @@ file_backed_destroy (struct page *page) {
         //msg("is not dirty");
     }
 	// hash table에서 삭제하기
-	//hash_delete(&thread_current()->spt.pages_map, &page->hash_elem);
+	hash_delete(&thread_current()->spt.pages_map, &page->hash_elem);
 
 	// if (page->frame != NULL) {
 	// 	free(page->frame);
 	// }
 	// page->frame = NULL;
     // file_close(file_page->file);
+    // spt_remove_page(&thread_current()->spt, page); // 필요할까?
 }
 
 /* Do the mmap */
@@ -148,17 +166,21 @@ do_mmap(void *addr, size_t length, int writable, struct file *file, off_t offset
 
     // 입력값 검증
     if (addr == NULL || pg_ofs(addr) != 0 || length == 0) {
-        //msg("DEBUG: Invalid address or length for mmap\n");
+        // msg("DEBUG: mmp fail %p %d", addr, length);
         return NULL;
     }
 
-    if (is_kernel_vaddr(addr) || is_kernel_vaddr(addr + length)) {
+    if (is_kernel_vaddr(addr)){ // }) || is_kernel_vaddr(addr + length)) {
+        // msg("DEBUG: mmap fail Kernel vaddr\n");
         return NULL;
     }
 
-    if (length >= KERN_BASE) { return NULL; }
+    if (length >= KERN_BASE) { 
+        // msg("DEBUG: mmap fail length >= KERN_BASE  %d\n", length);
+        return NULL; }
 
     if (pg_round_down(offset) != offset) {
+        // msg("DEBUG : mmap fail offset is not page aligned %d\n", offset);
         return NULL;
     }
 
@@ -230,7 +252,7 @@ bool lazy_load_segment_for_file (struct page *page, struct file_page *aux) {
     // page->file.read_bytes = aux->read_bytes;
     // page->file.zero_bytes = aux->zero_bytes;
     // page->file.is_end = aux->is_end;
-    lazy_load_segment(page, aux);
+    return lazy_load_segment(page, aux);
 }
 
 
@@ -273,6 +295,7 @@ do_munmap (void *addr, bool delhash) {
         pml4_clear_page(cur->pml4, page->va);
         //msg("clearing page finished.");
         if (delhash) { hash_delete (&thread_current()->spt.pages_map, &page->hash_elem); } // 이게 필요했구나..? 
+        // if (delhash) { spt_remove_page(&cur->spt, page); } // 이게 필요했구나..? 
         // page에 해당하는 frame이 있으면, 이것은 모두 해제 처리.
         // destroy 수순을 밟는다. 
         if (page->frame != NULL) {

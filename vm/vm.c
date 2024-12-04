@@ -7,11 +7,12 @@
 #include "threads/mmu.h"
 #include <list.h>
 
+
 struct list frame_table; /* The frame table. */
 // struct lock frame_lock; // 필요하려나? 
 
 /* Helper */
-int spt_hash (const struct hash_elem *elem, void *aux);
+uint64_t spt_hash (const struct hash_elem *elem, void *aux);
 bool cmp_spt (const struct hash_elem *a, const struct hash_elem *b, void *aux);
 
 /* Initializes the virtual memory subsystem by invoking each subsystem's
@@ -76,6 +77,7 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 		} 
 		else if (VM_TYPE(type) == VM_FILE) {
 			uninit_new(new_page, upage, init, type, aux, file_backed_initializer);
+			// new_page->file = *(struct file_page *) aux;
 		} 
 		else {
 			; // VM_PAGE_CACHE인 경우는 일단 무시?
@@ -105,7 +107,7 @@ struct page *
 spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
    //struct page *page = NULL;
    /* TODO: Fill this function. */
-   //page = (struct page *) malloc (sizeof (struct page));
+   struct page *page = (struct page *) malloc (sizeof (struct page));
    struct page page_start;
    // 주어진 va를 이용해서 page를 찾아야한다
    page_start.va = pg_round_down(va);
@@ -122,10 +124,11 @@ spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
 
 
    if (e==NULL){
-      // free (page);
+      free (page);
       return NULL; // page가 없으면 NULL을 반환
    }
-   struct page *page = hash_entry(e, struct page, hash_elem);
+//    struct page *page = hash_entry(e, struct page, hash_elem);
+   page = hash_entry(e, struct page, hash_elem);
 
    return page;
 }
@@ -150,7 +153,6 @@ spt_insert_page (struct supplemental_page_table *spt UNUSED,
 void
 spt_remove_page (struct supplemental_page_table *spt, struct page *page) {
 	//msg("Removing page");
-	hash_delete (&spt->pages_map, &page->hash_elem);
 	//msg("Hash deleted");
 	vm_dealloc_page (page);
 	//msg("Dealloc finished");
@@ -206,7 +208,13 @@ vm_evict_frame (void) {
 	struct frame *victim UNUSED = vm_get_victim ();
 	/* TODO: swap out the victim and return the evicted frame. */
 
+	if (victim->page == NULL){
+		// msg("DEBUG:  victim page is NULL");
+		return NULL;
+	}
+
 	if (swap_out(victim->page)){
+		// msg("DEBUG:  %p is swapped out", victim->page->va);
 		return victim;
 	}
 	else{
@@ -223,7 +231,11 @@ static struct frame *
 vm_get_frame (void) {
    void *paddr = palloc_get_page(PAL_USER);
    if (paddr == NULL) { // user pool이 꽉 차 있는 경우. 이 경우에는 하나를 evict한다. 
-      return vm_evict_frame(); 
+		struct frame *frame = vm_evict_frame();
+		frame->kva = paddr;
+		frame->page = NULL;
+		// free(frame);
+        return frame;
    }
    // user pool이 꽉 차 있지 않으면, 새로운 frame을 생성. 
    struct frame *frame = (struct frame *) malloc (sizeof (struct frame));
@@ -406,17 +418,19 @@ vm_do_claim_page (struct page *page) {
 	// frame은 지금 frame table에 있다. 
 
 	/* TODO: Insert page table entry to map page's VA to frame's PA. */
-	if (frame == NULL) {
-		// msg("DEBUG: vm_get_frame failed in vm_do_claim_page");
-		return false;
-	}
+	// if (frame == NULL) {
+	// 	// msg("DEBUG: vm_get_frame failed in vm_do_claim_page");
+	// 	return false;
+	// }
 	//msg("F4");
 	
 	// 위에서 갖고온 frame을 page table에 넣어 업데이트
 	// swap in이 가능한 경우?  page가 swap in이 가능한 경우에만 
 
-	if (pml4_set_page (thread_current()->pml4, page->va, frame->kva, page->writable)) { 	
+	if (pml4_get_page(thread_current()->pml4, page->va) == NULL &&
+		pml4_set_page (thread_current()->pml4, page->va, frame->kva, page->writable)) { 	
 		//msg("F5");
+			// msg("DEBUG:  %p will be swapped in", page->va);
 			return swap_in(page, frame->kva);
 		
 	}
@@ -494,7 +508,7 @@ supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
 			memcpy(dst_page->frame->kva, page->frame->kva, PGSIZE);
 			//msg("P5");
 		} else {
-			msg("unknown type");
+			// msg("unknown type");
 			return false;
 		}
 		
@@ -570,15 +584,35 @@ supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
 	
 }
 
+void destroy_page_table (struct hash_elem *e, void *aux) {
+	destroy(hash_entry(e, struct page, hash_elem));
+}
+
+
 /* Free the resource hold by the supplemental page table */
 void
 supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
 	/* TODO: Destroy all the supplemental_page_table hold by thread and
 	 * TODO: writeback all the modified contents to the storage. */
+
+	if (hash_empty(&spt->pages_map)) {
+		return;
+	}
+	struct hash_iterator spt_iterator; // spt를 iterate하기 위한 iterator
+	hash_first(&spt_iterator, &(spt->pages_map));  // spt의 첫번째 page부터 시작
+	while(hash_next(&spt_iterator)) {
+		struct page *page = hash_entry(hash_cur(&spt_iterator), struct page, hash_elem);
+		// page를 제거하고 free
+		// if (page->operations->type == VM_FILE && pml4_is_dirty(thread_current()->pml4, page->va)) {
+		// 	// file page이고 dirty한 경우에만 writeback
+		// 	swap_out(page);
+			
+		// }
+	}
 	
 	
 	
-	hash_clear(&(spt->pages_map), NULL);	
+	hash_clear(&(spt->pages_map), destroy_page_table);	
 }
 
 
@@ -591,7 +625,8 @@ bool cmp_spt (const struct hash_elem *a, const struct hash_elem *b, void *aux) {
 	return pa->va < pb->va;
 }
 
-int spt_hash (const struct hash_elem *elem, void *aux) {
+
+uint64_t spt_hash (const struct hash_elem *elem, void *aux) {
 	const struct page *p = hash_entry(elem, struct page, hash_elem);
 	return hash_bytes(&p -> va, sizeof(p->va));
 }

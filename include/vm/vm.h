@@ -73,13 +73,13 @@ struct frame {
 	struct list_elem elem; // For frame table 
 };
 
-//파일 내용을 lazy_load_segment으로 넘겨줘야하는 정보들
-struct spt_copy_aux {
-	struct file *page_file;
-	off_t offset;
-	uint32_t read_bytes;
-	uint32_t zero_bytes;
-};
+// //파일 내용을 lazy_load_segment으로 넘겨줘야하는 정보들
+// struct spt_copy_aux {
+// 	struct file *page_file;
+// 	off_t offset;
+// 	uint32_t read_bytes;
+// 	uint32_t zero_bytes;
+// };
 
 /* The function table for page operations.
  * This is one way of implementing "interface" in C.

@@ -982,21 +982,27 @@ lazy_load_segment (struct page *page, struct file_page *aux) { // static 지웟�
 	}
 
 	//파일 위치를 찾기 위해
-	file_seek(file, offset);
+	// file_seek(file, offset);
 	
 	// lock_acquire (&filesys_lock);
 	//offset에 담긴 파일을 물리 프레임으로부터 읽어야함.
-	off_t read_result = file_read(file, buffer, read_bytes);
+	// off_t read_result = file_read(file, buffer, read_bytes);
 	// lock_release (&filesys_lock);
 
-	if (read_result!= read_bytes) { 
+	if (file_read_at(file, buffer, read_bytes, offset) != (int) read_bytes) {
 		// Lazy load 실패
+		msg("DEBUG: lazy_load_segment failed. read_bytes = %d", read_bytes);
 		return false;
-	} else {
+	}
+
+	// if (read_result!= read_bytes) { 
+	// 	// Lazy load 실패
+	// 	return false;
+	// } else {
 		// read 성공. zero_bytes만큼 0으로 초기화
 		memset(buffer + read_bytes, 0, page_zero_bytes); 
 		return true;
-	}
+	// }
 
 	NOT_REACHED (); // 디버깅
 	return false;
@@ -1075,11 +1081,22 @@ setup_stack (struct intr_frame *if_) {
 	if (!vm_alloc_page(VM_ANON | VM_MARKER_0, stack_bottom, true)) { 
 		// TODO: writable에 true 맞는지 확인
 		// TODO: VM_MARKER_0이 맞는지 확인
+		struct page * page = spt_find_page(&thread_current()->spt, stack_bottom);
+		if (page) {
+			// vm_dealloc_page(page->va);
+			palloc_free_page(page);
+		}
+		
 		return success; // failed
 	}
 	if ( !vm_claim_page(stack_bottom)) {
 	
-		vm_dealloc_page(stack_bottom);
+		// vm_dealloc_page(stack_bottom);
+		struct page * page = spt_find_page(&thread_current()->spt, stack_bottom);
+		if (page) {
+			// vm_dealloc_page(page->va);
+			palloc_free_page(page);
+		}
 		return success; // failed
 	} 
 	if_->rsp = USER_STACK; // rsp를 USER_STACK으로 설정
