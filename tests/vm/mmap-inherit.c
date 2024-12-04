@@ -19,7 +19,7 @@ test_main (void)
   CHECK (mmap (actual, 4096, 0, handle, 0) != MAP_FAILED, "mmap \"sample.txt\"");
   if (memcmp (actual, sample, strlen (sample)))
     fail ("read of mmap'd file reported bad data");
-
+  
 	/* Spawn child and wait. */
 	child = fork("child-inherit");
 	if (child == 0) {
@@ -29,6 +29,8 @@ test_main (void)
 		CHECK (wait (child) == -1, "wait for child (should return -1)");
 		quiet = false;
 	}
+
+  //msg("Yoshi5");
 
   /* Verify data again. */
   CHECK (!memcmp (actual, sample, strlen (sample)),

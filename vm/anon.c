@@ -114,8 +114,8 @@ static void
 anon_destroy (struct page *page) {
 	struct anon_page *anon_page = &page->anon;
 	if (page->frame != NULL) {
-		// list_remove(&page->frame->elem);
-		// free(page->frame);
+		list_remove(&page->frame->elem);
+		palloc_free_page(page->frame->kva);
 		page->frame = NULL;
 	}
 }

@@ -73,6 +73,8 @@ file_backed_swap_in (struct page *page, void *kva) {
     }
     memset(kva + aux->read_bytes, 0, aux->zero_bytes); // zero_bytes만큼 0으로 초기화
 
+    page->frame->kva = kva;
+
     return true;
 
 }

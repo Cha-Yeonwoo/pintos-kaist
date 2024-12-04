@@ -452,6 +452,7 @@ supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
 		// ... uninitialized page면, uninit_new를 실행. 
 		// 그냥 그대로 복사하면 된다.
 		struct page *page = hash_entry(hash_cur(&spt_iterator), struct page, hash_elem);
+		if (page->va == NULL) { msg("WARNING!!"); }
 		enum vm_type type = page->operations->type;
 		if (VM_TYPE(type) == VM_UNINIT) {
 			// uninit page인 경우에는, 모든 정보가 page->uninit 안에 들어있다. 
@@ -461,7 +462,7 @@ supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
 			}
 		} else if (VM_TYPE(type) == VM_ANON) { 
 			// anon page인 경우에는, 일단 새로운 page를 만들고 claim을 통해서 initialize. 
-			if (!vm_alloc_page_with_initializer(VM_ANON, page->va, page->writable, page->uninit.init, page->uninit.aux)) {
+			if (!vm_alloc_page_with_initializer(VM_ANON, page->va, page->writable, NULL, NULL)) {
 				return false;
 			}
 			// page->va의 virtual address를 가지는 uninitialized page가 생성되었음. 
@@ -477,7 +478,7 @@ supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
 		} else if (VM_TYPE(type) == VM_FILE) {
 			//msg("P1");
 			// file page인 경우에는(mmap), 일단 새로운 page를 만들고 claim을 통해서 initialize. 
-			if (!vm_alloc_page_with_initializer(VM_FILE, page->va, page->writable, page->uninit.init, page->uninit.aux)) {
+			if (!vm_alloc_page_with_initializer(VM_FILE, page->va, page->writable, NULL, NULL)) {
 				return false;
 			}
 			//msg("P2");
@@ -575,7 +576,30 @@ void
 supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
 	/* TODO: Destroy all the supplemental_page_table hold by thread and
 	 * TODO: writeback all the modified contents to the storage. */
-	
+	if (spt == NULL) { return; }
+	if (hash_empty(&(spt->pages_map))) { return; }
+	struct hash_iterator spt_iterator; // src의 spt를 iterate하기 위한 iterator
+
+	hash_first(&spt_iterator, &(spt->pages_map));
+	while (hash_next(&spt_iterator)) {
+		struct page *page = hash_entry(hash_cur(&spt_iterator), struct page, hash_elem);
+		enum vm_type type = page->operations->type;
+		if (VM_TYPE(type) == VM_UNINIT) {
+		} else if (VM_TYPE(type) == VM_ANON) { 
+		} else if (VM_TYPE(type) == VM_FILE) {
+			if (page->frame != NULL) {
+				struct thread *cur = thread_current(); 
+				if (pml4_is_dirty(cur->pml4, page->va)) {
+            		struct file_page *file_page = &page->file;
+            		file_write_at(file_page->file, page->va, file_page->read_bytes, file_page->ofs);
+            		pml4_set_dirty(cur->pml4, page->va, 0);
+        		}
+			}
+		} else {
+			msg("unknown type");
+			return false;
+		}
+	}
 	
 	
 	hash_clear(&(spt->pages_map), NULL);	
