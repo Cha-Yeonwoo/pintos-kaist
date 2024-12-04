@@ -154,6 +154,7 @@ void
 spt_remove_page (struct supplemental_page_table *spt, struct page *page) {
 	//msg("Removing page");
 	//msg("Hash deleted");
+	list_remove(&page->frame->elem);
 	vm_dealloc_page (page);
 	//msg("Dealloc finished");
 }
@@ -234,7 +235,6 @@ vm_get_frame (void) {
 		struct frame *frame = vm_evict_frame();
 		frame->kva = paddr;
 		frame->page = NULL;
-		// free(frame);
         return frame;
    }
    // user pool이 꽉 차 있지 않으면, 새로운 frame을 생성. 
@@ -429,6 +429,7 @@ vm_do_claim_page (struct page *page) {
 
 	if (pml4_get_page(thread_current()->pml4, page->va) == NULL &&
 		pml4_set_page (thread_current()->pml4, page->va, frame->kva, page->writable)) { 	
+			// list_push_back(&frame_table, &frame->elem);
 		//msg("F5");
 			// msg("DEBUG:  %p will be swapped in", page->va);
 			return swap_in(page, frame->kva);

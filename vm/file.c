@@ -109,7 +109,7 @@ file_backed_swap_out (struct page *page) {
 
 	if (pml4_is_dirty(page->page_thread->pml4, page->va)) {
         file_write_at(aux->file, page->va, aux->read_bytes, aux->ofs);
-        file_seek(aux->file, file_page->ofs);
+        // file_seek(aux->file, file_page->ofs);
         pml4_set_dirty(page->page_thread->pml4, page->va, false);
     } 
 
@@ -142,7 +142,7 @@ file_backed_destroy (struct page *page) {
         //msg("is dirty");
         struct file_page *aux = &page->file;
 		file_write_at(aux->file, page->va, aux->read_bytes, aux->ofs);
-        file_seek(aux->file, file_page->ofs);
+        // file_seek(aux->file, file_page->ofs);
         pml4_set_dirty(thread_current()->pml4, page->va, false);
 	} else {
         //msg("is not dirty");
@@ -156,6 +156,13 @@ file_backed_destroy (struct page *page) {
 	// page->frame = NULL;
     // file_close(file_page->file);
     // spt_remove_page(&thread_current()->spt, page); // 필요할까?
+    // 그래도 뭔가 안지워지는듯한 느낌이 있으니
+    page->frame = NULL;
+    page->file.file = NULL;
+    page->file.ofs = 0;
+    page->file.read_bytes = 0;
+    page->file.zero_bytes = 0;
+    page->file.is_end = false;
 }
 
 /* Do the mmap */
@@ -303,8 +310,12 @@ do_munmap (void *addr, bool delhash) {
             list_remove(&page->frame->elem);
             free(page->frame);
             page->frame = NULL;
+            free(page); // 여기..!
+            // page를 free하는 것과 list_remove를 하는거가 같이 다녀야함.
+            // 안그러면 mmap-merge 관련 테케에서 문제가 발생함.
         }
-        free(page);
+
+        // free(page); // 요거를 위로 올림
 
 
         //msg("removing page finished.");

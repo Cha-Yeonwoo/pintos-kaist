@@ -46,8 +46,8 @@ child-qsort: exit(72)
 (page-merge-stk) end
 page-merge-stk: exit(0)
 Execution of 'page-merge-stk' complete.
-Timer: 397 ticks
-Thread: 88 idle ticks, 63 kernel ticks, 246 user ticks
+Timer: 421 ticks
+Thread: 94 idle ticks, 67 kernel ticks, 260 user ticks
 hd0:0: 0 reads, 0 writes
 hd0:1: 5216 reads, 6726 writes
 hd1:0: 224 reads, 0 writes

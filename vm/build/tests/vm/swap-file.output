@@ -19,8 +19,8 @@ Executing 'swap-file':
 (swap-file) mmap "large.txt"
 swap-file: exit(-1)
 Execution of 'swap-file' complete.
-Timer: 470 ticks
-Thread: 181 idle ticks, 209 kernel ticks, 80 user ticks
+Timer: 432 ticks
+Thread: 137 idle ticks, 222 kernel ticks, 73 user ticks
 hd0:0: 0 reads, 0 writes
 hd0:1: 7728 reads, 15900 writes
 hd1:0: 7931 reads, 0 writes
