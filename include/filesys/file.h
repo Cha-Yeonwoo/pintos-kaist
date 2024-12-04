@@ -2,8 +2,20 @@
 #define FILESYS_FILE_H
 
 #include "filesys/off_t.h"
+#include <stdbool.h>
+#include <list.h>
+
 
 struct inode;
+
+/* An open file. */
+struct file {
+	struct inode *inode;        /* File's inode. */
+	off_t pos;                  /* Current position. */
+	bool deny_write;            /* Has file_deny_write() been called? */
+	// int ref_count; 			/* Reference count  (added at project2 - file descriptor) */
+};
+
 
 /* Opening and closing files. */
 struct file *file_open (struct inode *);

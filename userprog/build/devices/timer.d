@@ -5,5 +5,9 @@ devices/timer.o: ../../devices/timer.c ../../include/devices/timer.h \
  ../../include/lib/stdbool.h ../../include/lib/stddef.h \
  ../../include/lib/kernel/stdio.h ../../include/threads/interrupt.h \
  ../../include/threads/io.h ../../include/threads/synch.h \
+<<<<<<< HEAD
  ../../include/lib/kernel/list.h ../../include/threads/thread.h \
  ../../threads/fixed-point.h
+=======
+ ../../include/lib/kernel/list.h ../../include/threads/thread.h
+>>>>>>> 7afeb0638b95389332b86b55bc3d986e452eeca6

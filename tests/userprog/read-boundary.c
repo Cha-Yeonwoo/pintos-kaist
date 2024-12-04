@@ -23,8 +23,8 @@ test_main (void)
     fail ("read() returned %d instead of %zu", byte_cnt, sizeof sample - 1);
   else if (strcmp (sample, buffer)) 
     {
-      msg ("expected text:\n%s", sample);
-      msg ("text actually read:\n%s", buffer);
+      // msg ("expected text:\n%s", sample);
+      // msg ("text actually read:\n%s", buffer);
       fail ("expected text differs from actual");
     }
 }

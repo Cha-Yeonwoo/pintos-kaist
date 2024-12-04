@@ -72,7 +72,7 @@ timer_calibrate (void) {
 
 /* Returns the number of timer ticks since the OS booted. */
 int64_t
-timer_ticks (void) {
+timer_ticks (void) { 
 	enum intr_level old_level = intr_disable ();
 	int64_t t = ticks;
 	intr_set_level (old_level);
@@ -95,9 +95,10 @@ static bool compare_tick (const struct list_elem *A,
 }
 /* Suspends execution for approximately TICKS timer ticks. */
 void
-timer_sleep (int64_t ticks) {
+timer_sleep (int64_t ticks) { 
 	int64_t start = timer_ticks ();
 
+<<<<<<< HEAD
 	ASSERT (intr_get_level () == INTR_ON);
 	// while (timer_elapsed (start) < ticks)
 	// 	thread_yield ();
@@ -108,6 +109,16 @@ timer_sleep (int64_t ticks) {
 	list_insert_ordered (&block_list, &th->elem, compare_tick, NULL);
 	thread_block ();
 	intr_set_level(old_level);
+=======
+	ASSERT (intr_get_level () == INTR_ON); // interrupt가 켜져있어야 한다.
+
+	// unique.k 08291910
+	// threads.c 파일로 이 문제를 이관한다.
+	// timer_elapsed(start) : 현재 tick - start tick
+	if (timer_elapsed(start) < ticks) {
+		thread_sleep(start + ticks); // global tick이 start + ticks일 때 thread가 깨어나도록 한다.
+	}
+>>>>>>> 7afeb0638b95389332b86b55bc3d986e452eeca6
 }
 
 /* Suspends execution for approximately MS milliseconds. */
@@ -133,11 +144,12 @@ void
 timer_print_stats (void) {
 	printf ("Timer: %"PRId64" ticks\n", timer_ticks ());
 }
-
+
 /* Timer interrupt handler. */
 static void
 timer_interrupt (struct intr_frame *args UNUSED) {
 	ticks++;
+<<<<<<< HEAD
 	thread_tick ();
 	/* Solution */
 	struct thread *th;
@@ -149,6 +161,33 @@ timer_interrupt (struct intr_frame *args UNUSED) {
 			thread_unblock (th);
 		} else
 			break;
+=======
+	thread_tick (ticks);
+
+	if (thread_mlfqs){
+		// TODO calculate recent_cpu and load_avg
+		// recent cpu 계산
+		// idel_thread, 각종 list 때문에 일단 thread.c에서 처리
+		struct thread *cur = thread_current();
+		// mlfqs_increment();
+		cur->recent_cpu = add_fp_int(cur->recent_cpu, 1);
+		// 4 tick 마다
+
+		if (ticks % TIMER_FREQ == 0) {
+		
+			mlfqs_load_avg();
+			// TODO recalculate all recent_cpu		 
+			mlfqs_recent_cpu_recalculate();
+		}
+
+		if (ticks % 4 == 0){
+			// TODO recalculate all  priority
+			mlfqs_priority_recalculate();
+		}
+
+
+		
+>>>>>>> 7afeb0638b95389332b86b55bc3d986e452eeca6
 	}
 }
 

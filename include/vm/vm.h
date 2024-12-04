@@ -2,6 +2,7 @@
 #define VM_VM_H
 #include <stdbool.h>
 #include "threads/palloc.h"
+#include <hash.h>
 
 enum vm_type {
 	/* page not initialized */
@@ -46,6 +47,10 @@ struct page {
 	struct frame *frame;   /* Back reference for frame */
 
 	/* Your implementation */
+	bool writable; // If the page is writable or not
+	struct hash_elem hash_elem; // For hash table
+
+	struct thread * page_thread; // page를 가지고 있는 thread
 
 	/* Per-type data are binded into the union.
 	 * Each function automatically detects the current union */
@@ -61,8 +66,19 @@ struct page {
 
 /* The representation of "frame" */
 struct frame {
-	void *kva;
+	void *kva; // Kernel virtual address. physical adress에 직접 매핑되어있는 주소
 	struct page *page;
+
+	/* VM */
+	struct list_elem elem; // For frame table 
+};
+
+//파일 내용을 lazy_load_segment으로 넘겨줘야하는 정보들
+struct spt_copy_aux {
+	struct file *page_file;
+	off_t offset;
+	uint32_t read_bytes;
+	uint32_t zero_bytes;
 };
 
 /* The function table for page operations.
@@ -85,6 +101,7 @@ struct page_operations {
  * We don't want to force you to obey any specific design for this struct.
  * All designs up to you for this. */
 struct supplemental_page_table {
+	struct hash pages_map; // Virtual address와 page를 매핑하기 위한 hash table
 };
 
 #include "threads/thread.h"

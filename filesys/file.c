@@ -3,12 +3,13 @@
 #include "filesys/inode.h"
 #include "threads/malloc.h"
 
-/* An open file. */
-struct file {
-	struct inode *inode;        /* File's inode. */
-	off_t pos;                  /* Current position. */
-	bool deny_write;            /* Has file_deny_write() been called? */
-};
+// /* An open file. */
+// struct file {
+// 	struct inode *inode;        /* File's inode. */
+// 	off_t pos;                  /* Current position. */
+// 	bool deny_write;            /* Has file_deny_write() been called? */
+// 	int ref_count; 			/* Reference count  (added at project2 - file descriptor) */
+// };
 
 /* Opens a file for the given INODE, of which it takes ownership,
  * and returns the new file.  Returns a null pointer if an
@@ -95,6 +96,7 @@ file_read_at (struct file *file, void *buffer, off_t size, off_t file_ofs) {
  * Advances FILE's position by the number of bytes read. */
 off_t
 file_write (struct file *file, const void *buffer, off_t size) {
+	// msg("DEBUGL: file: %p, buffer: %p, size: %d", file, buffer, size);
 	off_t bytes_written = inode_write_at (file->inode, buffer, size, file->pos);
 	file->pos += bytes_written;
 	return bytes_written;

@@ -6,4 +6,8 @@ tests/threads/priority-donate-multiple2.o: \
  ../../include/lib/kernel/stdio.h ../../tests/threads/tests.h \
  ../../include/threads/init.h ../../include/threads/synch.h \
  ../../include/lib/kernel/list.h ../../include/threads/thread.h \
+<<<<<<< HEAD
  ../../include/threads/interrupt.h ../../threads/fixed-point.h
+=======
+ ../../include/threads/interrupt.h
+>>>>>>> 7afeb0638b95389332b86b55bc3d986e452eeca6

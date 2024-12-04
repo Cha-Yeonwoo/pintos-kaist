@@ -6,7 +6,11 @@
 #include <stdint.h>
 #include "threads/synch.h"
 #include "threads/interrupt.h"
+<<<<<<< HEAD
 #include "threads/fixed-point.h"
+=======
+#include "threads/synch.h"
+>>>>>>> 7afeb0638b95389332b86b55bc3d986e452eeca6
 #ifdef VM
 #include "vm/vm.h"
 #endif
@@ -105,9 +109,13 @@ struct thread {
 	enum thread_status status;          /* Thread state. */
 	char name[16];                      /* Name (for debugging purposes). */
 	int priority;                       /* Priority. */
+	
+	int64_t timeToWakeUp;
+	struct lock *lock_waiting;
 
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem;              /* List element. */
+<<<<<<< HEAD
 	/* Solution */
 	int64_t ticks;                      /* Saved ticks */
 	int effective_priority;             /* Effective Priority */
@@ -120,12 +128,23 @@ struct thread {
 	int nice;
 	FP recent_cpu;
 	/* Solution done. */
+=======
+	struct list *list_containing;
+
+	/* Advanced Scheduler */
+	int nice;
+	int recent_cpu;
+	
+	struct list lock_list;
+	int original_priority;
+>>>>>>> 7afeb0638b95389332b86b55bc3d986e452eeca6
 
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
 	uint64_t *pml4;                     /* Page map level 4 */
 	struct file *executable;
 	int exit_status;
+<<<<<<< HEAD
 	struct semaphore wait_sema;
 	struct semaphore cleanup_ok;
 	struct list_elem child_elem;
@@ -134,10 +153,27 @@ struct thread {
 
 	struct list fd_list;
 	bool wait_on_exit;
+=======
+	struct semaphore wait_sema; 
+	struct semaphore exit_sema; 
+	struct list_elem child_elem;
+	struct list child_list;
+	
+	struct lock lock_for_child;
+	struct semaphore sema_for_fork;
+	struct semaphore sema_for_init;
+
+	struct list fd_list;
+	struct list fd_distinct_list;
+	bool wait_on_exit;
+	
+>>>>>>> 7afeb0638b95389332b86b55bc3d986e452eeca6
 #endif
 #ifdef VM
 	/* Table for whole virtual memory owned by thread. */
 	struct supplemental_page_table spt;
+	void *rsp;
+	// uint64_t rsp; // 스택에 저장할 포인터
 #endif
 
 	/* Owned by thread.c. */
@@ -148,8 +184,10 @@ struct thread {
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
    Controlled by kernel command-line option "-o mlfqs". */
-extern bool thread_mlfqs;
+extern bool thread_mlfqs; // advanced-scheduler
 
+
+<<<<<<< HEAD
 /* Solution */
 struct list block_list;
 bool compare_priority (const struct list_elem *A,
@@ -158,10 +196,14 @@ bool compare_priority (const struct list_elem *A,
 /* Solution done. */
 
 
+=======
+/* User Prog */
+>>>>>>> 7afeb0638b95389332b86b55bc3d986e452eeca6
 void thread_init (void);
 void thread_start (void);
 
-void thread_tick (void);
+// unique.k 08420954
+void thread_tick (int64_t);
 void thread_print_stats (void);
 
 typedef void thread_func (void *aux);
@@ -177,6 +219,11 @@ const char *thread_name (void);
 void thread_exit (void) NO_RETURN;
 void thread_yield (void);
 
+// unique.k 08291911
+// timer.c는 sleep 관련 문제를 threads.c로 이관하였음.
+// threads.c는 이 문제를 해결. timer.c에 정의된 ticks가 input 이상이 될 때까지 sleep 한다.
+void thread_sleep(int64_t);
+
 int thread_get_priority (void);
 void thread_set_priority (int);
 
@@ -185,6 +232,17 @@ void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
+bool cmp_priority (const struct list_elem *a, const struct list_elem *b);
+bool cmp_priority_lock (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
+void compare_and_yield (void);
+void compare_and_yield_on_return (void);
+
+void mlfqs_load_avg (void);
+void mlfqs_priority_recalculate (void);
+void mlfqs_recent_cpu_recalculate(void);
+
 void do_iret (struct intr_frame *tf);
+
+
 
 #endif /* threads/thread.h */

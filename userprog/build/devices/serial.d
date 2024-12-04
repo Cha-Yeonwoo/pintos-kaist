@@ -5,4 +5,8 @@ devices/serial.o: ../../devices/serial.c ../../include/devices/serial.h \
  ../../include/threads/synch.h ../../include/lib/kernel/list.h \
  ../../include/lib/stddef.h ../../include/devices/timer.h \
  ../../include/lib/round.h ../../include/threads/io.h \
+<<<<<<< HEAD
  ../../include/threads/thread.h ../../threads/fixed-point.h
+=======
+ ../../include/threads/thread.h
+>>>>>>> 7afeb0638b95389332b86b55bc3d986e452eeca6
